@@ -83,6 +83,8 @@ h3{margin:18px 0 8px;font-size:19px}
 .note{background:var(--warn-bg);border-left:4px solid #e0b030;padding:9px 14px;margin:10px 0;font-size:15px}
 .note.ok{background:var(--ok-bg);border-color:var(--borrow)}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.period{background:#fff;border:2px solid var(--line);border-radius:14px;padding:10px 14px}
+.period input[type=date]{width:auto}
 .inline input{width:110px;font-size:17px;padding:8px;border:2px solid var(--line);border-radius:10px}
 #cam{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:20}
 #cam.on{display:flex}
@@ -725,26 +727,52 @@ function table(cols, rows, rowClass) {
       cols.map(c => '<td' + (c[2] ? ' class="wrap"' : '') + '>' + esc(c[1](r)) + '</td>').join('') + '</tr>').join('') +
     '</table></div>';
 }
+// ランキングの期間（'2026-04-01' の形）。最初は今年度
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function periodPreset(kind) {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  const fy = m >= 3 ? y : y - 1;
+  return {
+    month: [new Date(y, m, 1), now],
+    lastmonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
+    fy: [new Date(fy, 3, 1), now],
+    lastfy: [new Date(fy - 1, 3, 1), new Date(fy, 2, 31)],
+    all: [new Date(2000, 0, 1), now],
+  }[kind].map(ymd);
+}
+function setPeriod(kind) { [state.from, state.to] = periodPreset(kind); state.period = kind; loadDash(); }
+function applyPeriod() { state.from = $('pd-from').value; state.to = $('pd-to').value; state.period = ''; loadDash(); }
 function loadDash() {
-  api('getDashboard', state.pin).then(d => {
+  if (!state.from) setPeriodVals('fy');
+  api('getDashboard', state.pin, state.from, state.to).then(d => {
     const loanCols = [['会員番号', l => l.sno], ['氏名', l => l.name], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due]];
+    const sl = s => s.replace(/-/g, '/');
+    const range = d.from <= '2000-01-01' ? '全期間' : sl(d.from) + '〜' + sl(d.to);
+    const pbtn = (k, label) => '<button class="btn small' + (state.period === k ? ' primary' : '') + '" onclick="setPeriod(\'' + k + '\')">' + label + '</button>';
     $('p-dash').innerHTML =
       '<div class="stats">' +
       '<div class="stat">登録冊数<b>' + d.nBooks + '</b></div>' +
       '<div class="stat">貸出中<b>' + d.nActive + '</b></div>' +
       '<div class="stat warn">滞納<b>' + d.nOverdue + '</b></div>' +
-      '<div class="stat">紛失中<b>' + d.nLost + '</b></div>' +
-      '<div class="stat">今年度の貸出<b>' + d.nYear + '</b></div>' +
-      '<div class="stat">今年度借りた人数<b>' + d.nReaders + '</b></div></div>' +
+      '<div class="stat">紛失中<b>' + d.nLost + '</b></div></div>' +
       '<h3>⚠️ 滞納者（' + d.today + ' 時点）</h3>' +
       table(loanCols.concat([['遅れ', l => l.late + '日']]), d.overdue, () => 'late') +
-      '<h3>貸出中の本</h3>' + table(loanCols, d.active, l => l.overdue ? 'late' : '') +
-      '<div class="two"><div><h3>よく借りた人（' + d.fyStart + '〜）</h3>' +
+      '<h3>📊 期間を指定して見る</h3>' +
+      '<div class="period">' +
+      '<div class="inline">' + pbtn('month', '今月') + pbtn('lastmonth', '先月') + pbtn('fy', '今年度') + pbtn('lastfy', '昨年度') + pbtn('all', '全期間') + '</div>' +
+      '<div class="inline" style="margin-top:8px"><input type="date" id="pd-from" value="' + esc(d.from <= '2000-01-01' ? '' : d.from) + '">〜' +
+      '<input type="date" id="pd-to" value="' + esc(d.to) + '"><button class="btn small" onclick="applyPeriod()">この期間で表示</button></div></div>' +
+      '<div class="stats" style="margin-top:12px">' +
+      '<div class="stat">貸出回数（' + range + '）<b>' + d.nYear + '</b></div>' +
+      '<div class="stat">借りた人数（' + range + '）<b>' + d.nReaders + '</b></div></div>' +
+      '<div class="two"><div><h3>よく借りた人（' + range + '）</h3>' +
       table([['順位', (r) => d.studentRank.indexOf(r) + 1], ['会員番号', r => r.sno], ['氏名', r => r.name], ['冊数', r => r.n]], d.studentRank) +
-      '</div><div><h3>人気の本（' + d.fyStart + '〜）</h3>' +
-      table([['順位', (r) => d.bookRank.indexOf(r) + 1], ['本', r => r.title, 1], ['回数', r => r.n]], d.bookRank) + '</div></div>';
+      '</div><div><h3>人気の本（' + range + '）</h3>' +
+      table([['順位', (r) => d.bookRank.indexOf(r) + 1], ['本', r => r.title, 1], ['回数', r => r.n]], d.bookRank) + '</div></div>' +
+      '<h3>貸出中の本（' + d.active.length + '冊・期限の近い順）</h3>' + table(loanCols, d.active, l => l.overdue ? 'late' : '');
   });
 }
+function setPeriodVals(kind) { [state.from, state.to] = periodPreset(kind); state.period = kind; }
 function loadHist() {
   const sno = $('hist-sno').value.trim();
   if (!sno) return;
@@ -1030,11 +1058,13 @@ const MOCK = (() => {
       if (!l) return found ? { ok: true, title: b.title, name: '', late: false, shelf: b.shelf } : { ok: false, msg: '『' + b.title + '』は貸出中ではありません（すでに返却済みです）。' };
       l.ret = now; return { ok: true, title: b.title, name: students[l.sno], late: k(l.due) < today, shelf: b.shelf }; },
     adminLogin: p => p === '0000' ? { ok: true } : { ok: false, msg: 'PINがちがいます（デモは 0000）' },
-    getDashboard: p => { pin(p); const act = loans.filter(l => !l.ret).map(view); const sc = {}, bc = {};
-      loans.forEach(l => { (sc[l.sno] = sc[l.sno] || { sno: l.sno, name: students[l.sno], n: 0 }).n++; const t = books.find(b => b.id === l.id).title; (bc[l.id] = bc[l.id] || { id: l.id, title: t, n: 0 }).n++; });
+    getDashboard: (p, from, to) => { pin(p); const act = loans.filter(l => !l.ret).map(view); const sc = {}, bc = {};
+      from = from || '2026-04-01'; to = to || today;
+      const inRange = loans.filter(l => k(l.out) >= from && k(l.out) <= to);
+      inRange.forEach(l => { (sc[l.sno] = sc[l.sno] || { sno: l.sno, name: students[l.sno], n: 0 }).n++; const t = books.find(b => b.id === l.id).title; (bc[l.id] = bc[l.id] || { id: l.id, title: t, n: 0 }).n++; });
       const top = o => Object.values(o).sort((a, b) => b.n - a.n);
-      return { today: f(now), fyStart: '2026/04/01', nBooks: books.filter(b => !b.status).length, nLost: books.filter(b => b.status === '紛失').length, nActive: act.length, nOverdue: act.filter(l => l.overdue).length,
-        nYear: loans.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
+      return { today: f(now), from: from, to: to, nBooks: books.filter(b => !b.status).length, nLost: books.filter(b => b.status === '紛失').length, nActive: act.length, nOverdue: act.filter(l => l.overdue).length,
+        nYear: inRange.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
     getStudentHistory: (p, sno) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その生徒番号は見つかりません。' };
       return { ok: true, student: { no: sno, name: students[sno] }, list: loans.filter(l => l.sno === sno).map(view).reverse() }; },
     lookupIsbn: (p, isbn) => { pin(p); isbn = String(isbn).replace(/-/g, ''); if (!/^97[89]\d{10}$/.test(isbn)) return { ok: false, msg: 'ISBN（978 か 979 ではじまる13けた）のバーコードを読みとってください。' };
