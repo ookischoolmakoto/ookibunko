@@ -459,7 +459,7 @@ function callApi(name, args) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // text/plain にすると Apps Script でも受けとれる
     body: JSON.stringify({ key: API_KEY, fn: name, args: args }),
   }).then(r => { if (!r.ok) throw new Error('通信エラー（' + r.status + '）'); return r.json(); },
-          () => { throw new Error('通信できませんでした。Wi-Fiを確認してください。'); })
+          () => { throw new Error('受付窓口と通信できませんでした。\n・Wi-Fiにつながっているか\n・（先生へ）Apps Script の公開範囲が「全員」か、新バージョンでデプロイしたか\nを確認してください。'); })
     .then(j => { if (j.error) throw new Error(j.error); return j.result; });
 }
 function api(name, ...args) {
