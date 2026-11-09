@@ -505,6 +505,7 @@ function resetIdle() {
   const cur = document.querySelector('.view.on');
   if (!cur || cur.id === 'v-home') return;
   if (MODE === 'admin' && cur.id === 'v-login') return;
+  if (cur.id === 'v-result') return;   // 結果画面は startResultCountdown が10秒でもどす
   idleTimer = setTimeout(() => { if (cur.id === 'v-admin') state.pin = null; home(); }, IDLE[cur.id] || 60000);
 }
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, resetIdle, true));
@@ -606,9 +607,26 @@ function showResult(ok, msg, sub, due, more, extra, kind, html) {
     (extra ? '<p class="sub" style="font-size:19px;margin-top:16px">' + esc(extra) + '</p>' : '') +
     '</div><div class="row">' +
     (more ? '<button class="btn green" onclick="continueBorrow()">続けて借りる</button>' : '') +
-    (kind === 'return' ? '<button class="btn" style="border-color:var(--return);color:var(--return)" onclick="startReturn()">' + (ok ? '続けて返す' : 'もう一度読み取る') + '</button>' : '') +
-    '<button class="btn primary" onclick="home()">終わる</button></div>';
+    (kind === 'return' && !ok ? '<button class="btn" style="border-color:var(--return);color:var(--return)" onclick="startReturn()">もう一度読み取る</button>' : '') +
+    '<button class="btn primary" onclick="home()">終わる</button></div>' +
+    '<p class="hint" id="result-count"></p>';
   show('v-result');
+  chime(ok);
+  startResultCountdown();
+}
+// 結果画面は10秒で最初の画面に自動でもどる（画面をさわっても延びない）
+let resultTimer = null;
+function startResultCountdown() {
+  clearInterval(resultTimer);
+  let n = 10;
+  const step = () => {
+    if (!$('v-result').classList.contains('on')) return clearInterval(resultTimer);
+    if (n <= 0) { clearInterval(resultTimer); return home(); }
+    $('result-count').textContent = n + '秒後に最初の画面にもどります';
+    n--;
+  };
+  step();
+  resultTimer = setInterval(step, 1000);
 }
 
 // ---- カメラ ----
@@ -931,6 +949,34 @@ function invFix() {
 
 // ---- 音（読みとれた合図） ----
 let actx = null;
+// iPad は「画面をさわったとき」にしか音の準備ができないので、最初のタッチで準備しておく
+function unlockAudio() {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const b = actx.createBuffer(1, 1, 22050), s = actx.createBufferSource();   // 無音を1回鳴らして有効にする
+    s.buffer = b; s.connect(actx.destination); s.start(0);
+  } catch (e) { /* 音が出なくても続行 */ }
+}
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
+// 借りた・返した：ピンポン（高い音2つ）／できなかった：ブブー（低い音2つ）
+function chime(ok) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const notes = ok ? [[988, 0], [1319, 0.16]] : [[220, 0], [196, 0.22]];
+    notes.forEach(([f, at]) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + at;
+      o.type = ok ? 'sine' : 'square';
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(ok ? 0.4 : 0.15, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (ok ? 0.45 : 0.2));
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t + 0.5);
+    });
+  } catch (e) { /* 音が出なくても続行 */ }
+}
 function beep(ok) {
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
