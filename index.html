@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>大木文庫</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#fbf7ef; --card:#fff; --ink:#2b2a27; --muted:#7a746a; --line:#e6dfd0;
+  --borrow:#2f7d5b; --return:#c4682b; --accent:#3a5a8c;
+  --danger:#b83227; --danger-bg:#fdecea; --ok-bg:#e8f5ee; --warn-bg:#fff8e1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;-webkit-tap-highlight-color:transparent}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:2px solid var(--line)}
+header h1{margin:0;font-size:26px;letter-spacing:.1em;cursor:pointer}
+header .clock{font-size:18px;color:var(--muted)}
+main{max-width:920px;margin:0 auto;padding:20px 16px 70px}
+.view{display:none}.view.on{display:block}
+h2{font-size:30px;text-align:center;margin:12px 0 22px}
+button{font-family:inherit;cursor:pointer}
+.home{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:50px}
+.big{border:0;border-radius:28px;color:#fff;font-size:52px;font-weight:700;padding:80px 10px;box-shadow:0 7px 0 rgba(0,0,0,.2)}
+.big small{display:block;font-size:20px;font-weight:400;margin-top:12px;opacity:.9}
+.big:active{transform:translateY(5px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.big.borrow{background:var(--borrow)}.big.return{background:var(--return)}
+@media (max-width:600px){.home{grid-template-columns:1fr}.big{padding:40px 10px;font-size:40px}}
+.display{font-size:clamp(34px,9vw,56px);text-align:center;letter-spacing:.1em;background:#fff;border:3px solid var(--line);border-radius:18px;
+  min-height:96px;padding:10px;margin:0 auto 10px;max-width:420px;font-variant-numeric:tabular-nums}
+.msg-err{color:var(--danger);text-align:center;font-size:20px;min-height:30px;margin-bottom:8px}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:420px;margin:0 auto}
+.keypad button{font-size:36px;padding:16px 0;border-radius:16px;border:2px solid var(--line);background:#fff;color:var(--ink)}
+.keypad button:active{background:#efe8d8}
+.keypad .ok{background:var(--borrow);color:#fff;border-color:var(--borrow);font-weight:700}
+.keypad .del{font-size:22px}
+.btn{font-size:20px;padding:12px 24px;border-radius:14px;border:2px solid var(--line);background:#fff;color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.green{background:var(--borrow);border-color:var(--borrow);color:#fff}
+.btn.small{font-size:15px;padding:8px 14px}
+.row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+.scanbox{max-width:560px;margin:0 auto;text-align:center}
+.scanrow{display:flex;gap:10px}
+.scan{flex:1;min-width:0;font-size:28px;text-align:center;padding:14px;border-radius:16px;border:3px dashed var(--accent);background:#fff;font-family:inherit}
+.scan:focus{outline:none;border-style:solid}
+.hint{color:var(--muted);text-align:center;font-size:17px;margin:10px 0}
+.qrpic{font-size:70px;text-align:center;margin:0}
+.card{max-width:560px;margin:0 auto 18px;background:#fff;border:2px solid var(--line);border-radius:16px;padding:12px 18px}
+.card ul{margin:6px 0;padding-left:1.2em}.card li{margin:5px 0;font-size:18px}
+.late{color:var(--danger);font-weight:700}
+.stop{background:var(--danger-bg);border-color:#f2c2bc;font-size:20px;text-align:center}
+.result{text-align:center;padding:28px 20px;border-radius:24px;margin-top:16px}
+.result.ok{background:var(--ok-bg)}.result.ng{background:var(--danger-bg)}
+.result .icon{font-size:76px;line-height:1}
+.result .msg{font-size:34px;font-weight:700;margin:12px 0}
+.result .sub{font-size:22px}
+.result .due{display:inline-block;margin-top:16px;font-size:30px;font-weight:700;background:#fff;border-radius:14px;padding:10px 24px}
+.teacher{position:fixed;right:10px;bottom:8px;font-size:14px;color:var(--muted);background:none;border:0;padding:8px}
+/* 先生用 */
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.tabs button{font-size:17px;padding:10px 14px;border:0;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted)}
+.tabs button.on{border-color:var(--accent);color:var(--ink);font-weight:700}
+.pane{display:none}.pane.on{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.stat{background:#fff;border:2px solid var(--line);border-radius:14px;padding:10px 14px;font-size:14px;color:var(--muted)}
+.stat b{display:block;font-size:30px;color:var(--ink)}
+.stat.warn b{color:var(--danger)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:15px;margin-bottom:22px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+td.wrap{white-space:normal}
+th{background:#f3eee2}
+tr.late td{background:var(--danger-bg)}
+h3{margin:18px 0 8px;font-size:19px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+.form{max-width:560px}
+.form label{display:block;margin:12px 0 4px;font-weight:700}
+.form input{width:100%;font-size:18px;padding:10px;border:2px solid var(--line);border-radius:10px;font-family:inherit;background:#fff}
+.note{background:var(--warn-bg);border-left:4px solid #e0b030;padding:9px 14px;margin:10px 0;font-size:15px}
+.note.ok{background:var(--ok-bg);border-color:var(--borrow)}
+.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inline input{width:110px;font-size:17px;padding:8px;border:2px solid var(--line);border-radius:10px}
+#cam{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:20}
+#cam.on{display:flex}
+.camwrap{width:min(100%,440px);margin:0 auto 6px;border-radius:18px;overflow:hidden;background:#222;min-height:60px}
+#cw-modal{width:min(90vw,520px)}
+.camwrap #reader{width:100%}
+.camwrap .camfail{display:none;padding:22px 14px;text-align:center;background:var(--warn-bg);font-size:18px}
+#cw-modal .camfail{background:transparent}
+.camwrap.failed{background:transparent}
+.camwrap.failed #reader{display:none}
+.camwrap.failed .camfail{display:block}
+.big-photo{display:inline-block;font-size:24px;padding:18px 28px;position:relative}
+.big-photo input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+body>#reader{display:none}
+#loading{position:fixed;inset:0;background:rgba(251,247,239,.6);display:none;align-items:center;justify-content:center;font-size:24px;z-index:30}
+#loading.on{display:flex}
+#mockbar{background:#3a5a8c;color:#fff;text-align:center;font-size:13px;padding:4px;display:none}
+/* ラベル（A4・44面 48.3×25.4mm） */
+#print-root{display:none;margin:0 auto 40px;width:210mm}
+#print-root.on{display:block}
+.sheet{width:210mm;height:297mm;padding:8.8mm 8.4mm;background:#fff;display:grid;
+  grid-template-columns:repeat(4,48.3mm);grid-template-rows:repeat(11,25.4mm);margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.label{display:flex;align-items:center;gap:2mm;padding:1.5mm 2.5mm;overflow:hidden;outline:1px dashed #ddd;outline-offset:-1px}
+.label .qr{width:20mm;height:20mm;flex:none}
+.label .qr img,.label .qr canvas{width:20mm!important;height:20mm!important}
+.label .qr canvas{display:none!important}
+.label .t{font-size:7pt;line-height:1.3;overflow:hidden;max-height:21mm;color:#000}
+.label .id{font-weight:700;font-size:10pt;display:block}
+.label.used{background:repeating-linear-gradient(45deg,#f4f4f4 0 6px,#fff 6px 12px)}
+.label .sh{display:inline-block;padding:0 1.2mm;border-radius:1mm;margin-right:1mm;font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.shelves{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
+.shelves button{min-width:64px;padding:10px 14px;border-radius:10px;border:3px solid transparent;font-size:18px;font-weight:700;cursor:pointer;color:#2b2a27}
+.shelves button.on{border-color:#2b2a27;box-shadow:0 0 0 2px #fff inset}
+.modebar{color:#fff;font-size:24px;font-weight:700;text-align:center;padding:10px;border-radius:14px;margin-bottom:6px;letter-spacing:.1em}
+.modebar.borrow{background:var(--borrow)}.modebar.return{background:var(--return)}
+.steps{text-align:left;font-size:19px;line-height:1.5;background:#fff;border:2px solid var(--line);border-radius:16px;padding:12px 16px 12px 44px;margin:14px 0}
+.steps li{margin:4px 0}
+.steps b{color:var(--return)}
+#v-borrow-book .steps b{color:var(--borrow)}
+details.manual{margin-top:12px}
+details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding:6px}
+.shelfbox{display:inline-block;margin-top:16px;background:#fff;border-radius:16px;padding:12px 22px;font-size:24px;font-weight:700}
+.shelfbox .chip{display:inline-block;padding:2px 14px;border-radius:10px;margin:0 6px}
+.inv-ok{background:var(--ok-bg);border-radius:12px;padding:10px 14px;font-size:18px}
+.inv-ng{background:var(--danger-bg);border-radius:12px;padding:10px 14px;font-size:18px}
+.bookcard{background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px 18px;max-width:560px}
+.bookcard .ttl{font-size:20px;font-weight:700;margin:4px 0}
+.tag{display:inline-block;border-radius:8px;padding:2px 10px;font-size:14px;font-weight:700;background:var(--ok-bg);color:var(--borrow)}
+.tag.bad{background:var(--danger-bg);color:var(--danger)}
+@media print{
+  @page{size:A4;margin:0}
+  body>*:not(#print-root){display:none!important}
+  html,body{background:#fff}
+  #print-root{display:block!important;margin:0}
+  .sheet{margin:0;box-shadow:none;break-after:page}
+  .label{outline:none}
+  .label.used{background:none}
+}
+</style>
+</head>
+<body>
+<div id="mockbar">プレビュー用のデモデータで動いています（スプレッドシートには保存されません）</div>
+<header>
+  <h1 onclick="home()" id="title">📚 大木文庫</h1>
+  <div class="clock" id="clock"></div>
+</header>
+<main>
+  <!-- ホーム -->
+  <section id="v-home" class="view on">
+    <div class="home">
+      <button class="big borrow" onclick="startBorrow()">借りる<small>本を借りるとき</small></button>
+      <button class="big return" onclick="startReturn()">返す<small>本を返すとき</small></button>
+    </div>
+    <p class="hint" style="margin-top:36px">貸出期間は2週間です</p>
+  </section>
+
+  <!-- 生徒番号 -->
+  <section id="v-student" class="view">
+    <div class="modebar borrow">📗 本を借りる</div>
+    <h2>四谷大塚の会員番号8桁を入力してください</h2>
+    <div class="display" id="sno"></div>
+    <div class="msg-err" id="sno-err"></div>
+    <div class="keypad">
+      <button onclick="key('1')">1</button><button onclick="key('2')">2</button><button onclick="key('3')">3</button>
+      <button onclick="key('4')">4</button><button onclick="key('5')">5</button><button onclick="key('6')">6</button>
+      <button onclick="key('7')">7</button><button onclick="key('8')">8</button><button onclick="key('9')">9</button>
+      <button class="del" onclick="key('del')">消す</button><button onclick="key('0')">0</button><button class="ok" onclick="key('ok')">OK</button>
+    </div>
+    <div class="row"><button class="btn" onclick="home()">もどる</button></div>
+  </section>
+
+  <!-- 本人確認 -->
+  <section id="v-confirm" class="view">
+    <h2 style="margin-top:30px">あなたは</h2>
+    <div class="display" id="cf-name" style="letter-spacing:.05em;max-width:560px"></div>
+    <p class="hint" id="cf-no" style="font-size:20px"></p>
+    <h2>ですか？</h2>
+    <div class="row">
+      <button class="btn" style="font-size:26px;padding:18px 34px" onclick="startBorrow()">いいえ</button>
+      <button class="btn green" style="font-size:26px;padding:18px 50px" onclick="confirmYes()">はい</button>
+    </div>
+  </section>
+
+  <!-- 借りる本を読む -->
+  <section id="v-borrow-book" class="view">
+    <div class="modebar borrow">📗 本を借りる</div>
+    <h2 id="greet"></h2>
+    <div id="my-loans"></div>
+    <div id="borrow-scan" class="scanbox">
+      <ol class="steps">
+        <li>借りる本の <b>QRラベル</b> を探します</li>
+        <li>QRラベルを <b>カメラに向けて</b> かざします（下の枠に映れば読み取れます）</li>
+      </ol>
+      <div class="camwrap" id="cw-borrow">
+        <div class="camfail">
+          <p>写真を撮って読み取ります</p>
+          <label class="btn green big-photo">📷 QRラベルの写真を撮る
+            <input type="file" accept="image/*" capture="environment" onchange="scanPhoto(this, doBorrow)"></label>
+        </div>
+      </div>
+      <details class="manual">
+        <summary>QRラベルが読み取れないとき</summary>
+        <p class="hint">ラベルに書いてある4桁の番号（例：1012）を入力してください</p>
+        <div class="scanrow">
+          <input id="borrow-code" class="scan" placeholder="番号" inputmode="numeric" autocomplete="off" autocapitalize="off">
+          <button class="btn primary" onclick="submitScan('borrow-code')">OK</button>
+        </div>
+      </details>
+    </div>
+    <div class="row"><button class="btn" onclick="home()">やめる</button></div>
+  </section>
+
+  <!-- 返す本を読む -->
+  <section id="v-return" class="view">
+    <div class="modebar return">📕 本を返す</div>
+    <div class="scanbox">
+      <ol class="steps">
+        <li>返す本の <b>QRラベル</b> を探します</li>
+        <li>QRラベルを <b>カメラに向けて</b> かざします（下の枠に映れば読み取れます）</li>
+        <li>「返却しました」と出たら、本を <b>ラベルの色の本棚</b> に戻します</li>
+      </ol>
+      <div class="camwrap" id="cw-return">
+        <div class="camfail">
+          <p>写真を撮って読み取ります</p>
+          <label class="btn green big-photo">📷 QRラベルの写真を撮る
+            <input type="file" accept="image/*" capture="environment" onchange="scanPhoto(this, doReturn)"></label>
+        </div>
+      </div>
+      <p class="hint">会員番号の入力はいりません</p>
+      <details class="manual">
+        <summary>QRラベルが読み取れないとき</summary>
+        <p class="hint">ラベルに書いてある4桁の番号（例：1012）を入力してください</p>
+        <div class="scanrow">
+          <input id="return-code" class="scan" placeholder="番号" inputmode="numeric" autocomplete="off" autocapitalize="off">
+          <button class="btn primary" onclick="submitScan('return-code')">OK</button>
+        </div>
+      </details>
+    </div>
+    <div class="row"><button class="btn" onclick="home()">やめる</button></div>
+  </section>
+
+  <!-- 結果 -->
+  <section id="v-result" class="view"><div id="result"></div></section>
+
+  <!-- 先生ログイン -->
+  <section id="v-login" class="view">
+    <h2>先生用 管理画面</h2>
+    <div class="form" style="margin:0 auto;max-width:320px;text-align:center">
+      <input id="pin" type="password" inputmode="numeric" placeholder="PIN" style="text-align:center;font-size:28px"
+             onkeydown="if(event.key==='Enter')login()">
+      <div class="msg-err" id="pin-err" style="margin-top:8px"></div>
+      <div class="row"><button class="btn primary" onclick="login()">ひらく</button></div>
+    </div>
+  </section>
+
+  <!-- 先生用画面 -->
+  <section id="v-admin" class="view">
+    <div class="tabs" id="tabs">
+      <button data-tab="dash" class="on">貸出状況</button>
+      <button data-tab="hist">生徒の記録</button>
+      <button data-tab="reg">本の登録</button>
+      <button data-tab="labels">ラベル印刷</button>
+      <button data-tab="book">紛失・廃棄</button>
+      <button data-tab="inv">棚卸し</button>
+      <span style="flex:1"></span>
+      <button onclick="logout()">とじる</button>
+    </div>
+
+    <div class="pane on" id="p-dash"></div>
+
+    <div class="pane" id="p-hist">
+      <div class="inline">
+        <input id="hist-sno" inputmode="numeric" placeholder="会員番号" style="width:160px" onkeydown="if(event.key==='Enter')loadHist()">
+        <button class="btn primary small" onclick="loadHist()">表示</button>
+      </div>
+      <div id="hist-out" style="margin-top:14px"></div>
+    </div>
+
+    <div class="pane" id="p-reg">
+      <div class="form">
+        <label>⓪ 棚（色）をえらぶ … 番号の千の位になります（赤＝1001〜、黄＝2001〜）</label>
+        <div class="shelves" id="reg-shelves"></div>
+        <label>① 本のうらの ISBNバーコード（978…）を読む</label>
+        <div class="scanrow">
+          <input id="isbn-scan" class="scan" style="font-size:20px;padding:10px" placeholder="ISBN" autocomplete="off">
+          <button class="btn small" onclick="openCam(doLookup)">📷</button>
+        </div>
+        <p class="hint" style="text-align:left">ISBNがない古い本は <a href="#" onclick="manualBook();return false">こちら</a> から手入力</p>
+        <div id="reg-note"></div>
+        <label>② タイトル</label><input id="reg-title">
+        <label>著者</label><input id="reg-author">
+        <input id="reg-isbn" type="hidden">
+        <div class="row" style="justify-content:flex-start"><button class="btn green" onclick="doRegister()">③ 登録する</button></div>
+      </div>
+      <h3>この画面で登録した本</h3>
+      <div id="reg-list" class="hint" style="text-align:left">まだありません</div>
+    </div>
+
+    <div class="pane" id="p-labels">
+      <p class="note">A4・44面（48.3×25.4mm）のラベルシール用です。印刷はパソコンからがおすすめ（倍率100%・余白なし）。</p>
+      <div class="inline">
+        管理番号 <input id="lb-from" inputmode="numeric" placeholder="1001"> 〜 <input id="lb-to" inputmode="numeric" placeholder="1044">
+        <button class="btn small" onclick="makeLabels()">作成</button>
+        <button class="btn small" onclick="makeLabels(true)">今回登録した本</button>
+      </div>
+      <div class="inline" style="margin-top:10px">
+        使いかけのシートに印刷：<input id="lb-skip" inputmode="numeric" placeholder="1"> 枚目から（左上が1、右へ 1→2→3→4、次の段が 5…）
+      </div>
+      <div class="inline" style="margin-top:10px">
+        <button class="btn primary small" onclick="window.print()">印刷</button>
+      </div>
+      <div id="lb-msg" class="hint" style="text-align:left"></div>
+      <div id="lb-map"></div>
+    </div>
+
+    <div class="pane" id="p-book">
+      <div class="inline">
+        <input id="bk-code" style="width:200px" placeholder="管理番号（1012 など）" onkeydown="if(event.key==='Enter')loadBook()">
+        <button class="btn primary small" onclick="loadBook()">表示</button>
+        <button class="btn small" onclick="openCam(t => { $('bk-code').value = t; loadBook(); })">📷 読む</button>
+      </div>
+      <div id="bk-out" style="margin-top:14px"></div>
+      <h3>紛失・廃棄になっている本</h3>
+      <div id="bk-list"></div>
+      <p class="hint" style="text-align:left">「紛失」の本は、生徒が「返す」で読みとると自動で元にもどります。</p>
+    </div>
+
+    <div class="pane" id="p-inv">
+      <p class="note">本棚の本を はしから順番に読みとっていきます。途中でやめても、この端末に記録が残ります（再開できます）。<br>
+        読みとり終わったら「結果を見る」で、記録と本棚のちがいを確認します。</p>
+      <div class="inline">
+        <button class="btn green small" onclick="invStart()">▶ 読みとり開始</button>
+        <button class="btn small" onclick="invStop()">一時停止</button>
+        <button class="btn primary small" onclick="invResult()">結果を見る</button>
+        <span style="flex:1"></span>
+        <button class="btn small" onclick="invReset()">最初からやりなおす</button>
+      </div>
+      <div class="camwrap" id="cw-inv" style="display:none;margin:14px 0 6px">
+        <div class="camfail">
+          <p>写真をとって 1冊ずつ読みとります</p>
+          <label class="btn green big-photo">📷 写真をとる
+            <input type="file" accept="image/*" capture="environment" onchange="scanPhoto(this, invScan)"></label>
+        </div>
+      </div>
+      <div class="inline" style="margin-top:10px">
+        <input id="inv-code" style="width:200px" placeholder="番号を手入力" onkeydown="if(event.key==='Enter'){invScan(this.value);this.value='';}">
+        <span id="inv-count" style="font-size:18px;font-weight:700"></span>
+      </div>
+      <div id="inv-last" style="margin-top:8px"></div>
+      <div id="inv-out" style="margin-top:10px"></div>
+    </div>
+  </section>
+</main>
+
+<div id="print-root"></div>
+<div id="cam">
+  <div class="camwrap" id="cw-modal">
+    <div class="camfail" style="color:#fff">
+      <p>写真をとって 読みとります</p>
+      <label class="btn green big-photo">📷 写真をとる
+        <input type="file" accept="image/*" capture="environment" onchange="scanPhoto(this, t => { closeCam(); camModalFn(t); })"></label>
+    </div>
+  </div>
+  <button class="btn" onclick="closeCam()">とじる</button>
+</div>
+<div id="reader"></div>
+<div id="reader-file" style="display:none"></div>
+<div id="loading">よみこみ中…</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const state = { sno: '', student: null, pin: null, registered: [], tab: 'dash', shelf: '' };
+// 棚（色）と番号の千の位。Code.gs の CONFIG.SHELVES と同じにする
+const SHELVES = { '赤': 1, '黄': 2, '青': 3, '緑': 4, 'Jr': 5, '禁': 6 };
+const SHELF_COLOR = { '赤': '#ff9999', '黄': '#ffee58', '青': '#90caf9', '緑': '#a5d6a7', 'Jr': '#e1bee7', '禁': '#cfcfcf' };
+function shelfTag(sh) { return sh ? '<span class="sh" style="background:' + (SHELF_COLOR[sh] || '#eee') + '">' + esc(sh) + '</span>' : ''; }
+function pickShelf(sh) {
+  state.shelf = sh;
+  document.querySelectorAll('#reg-shelves button').forEach(b => b.classList.toggle('on', b.dataset.sh === sh));
+}
+(function renderShelves() {
+  $('reg-shelves').innerHTML = Object.keys(SHELVES).map(k =>
+    '<button type="button" data-sh="' + k + '" style="background:' + SHELF_COLOR[k] + '" onclick="pickShelf(\'' + k + '\')">' + k +
+    '<br><small style="font-weight:400;font-size:12px">' + SHELVES[k] + '000番台</small></button>').join('');
+})();
+const IS_GAS = !!(window.google && google.script && google.script.run);
+
+// ===== 外部のサイトに置くときの設定 =====
+// 受付窓口（Apps Script の …/exec）のURLと合言葉は、このファイルには書きません。
+// 端末ごとに1回、URLの最後に  #api=受付窓口のURL&key=合言葉  を付けて開くと、その端末に記録されます
+// （アドレスバーからはすぐ消えます）。記録がない端末では、プレビュー用のデモデータで動きます。
+const API_STORE = 'ookibunko-api', KEY_STORE = 'ookibunko-key';
+let API_URL = '', API_KEY = '', NEED_SETUP = false;
+(function readSettings() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const api = h.get('api'), key = h.get('key');
+  const okApi = api && /^https:\/\/script\.google\.com\/[\w\/.-]+\/exec$/.test(api);
+  try {
+    if (okApi) localStorage.setItem(API_STORE, api);
+    if (key && /^[0-9a-zA-Z]+$/.test(key)) localStorage.setItem(KEY_STORE, key);
+    if (api || key) history.replaceState(null, '', location.pathname + location.search);
+    API_URL = localStorage.getItem(API_STORE) || '';
+    API_KEY = localStorage.getItem(KEY_STORE) || '';
+  } catch (e) { API_URL = okApi ? api : ''; API_KEY = key || ''; }
+  // 外部サイト（https）で開いているのに未設定なら、デモではなく「設定してください」を出す
+  NEED_SETUP = location.protocol === 'https:' && !(window.google && google.script) && !(API_URL && API_KEY);
+})();
+const USE_API = !IS_GAS && (!!API_URL || NEED_SETUP);
+
+// ---- サーバー呼び出し ----
+function callApi(name, args) {
+  if (!API_URL || !API_KEY) return Promise.reject(new Error('この端末はまだ設定されていません。先生に知らせてください。'));
+  return fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // text/plain にすると Apps Script でも受けとれる
+    body: JSON.stringify({ key: API_KEY, fn: name, args: args }),
+  }).then(r => { if (!r.ok) throw new Error('通信エラー（' + r.status + '）'); return r.json(); },
+          () => { throw new Error('通信できませんでした。Wi-Fiを確認してください。'); })
+    .then(j => { if (j.error) throw new Error(j.error); return j.result; });
+}
+function api(name, ...args) {
+  $('loading').classList.add('on');
+  return new Promise((resolve, reject) => {
+    const done = f => v => { $('loading').classList.remove('on'); f(v); };
+    if (IS_GAS) {
+      google.script.run.withSuccessHandler(done(resolve)).withFailureHandler(done(reject))[name](...args);
+    } else if (USE_API) {
+      callApi(name, args).then(done(resolve), done(reject));
+    } else {
+      setTimeout(() => { try { done(resolve)(MOCK[name](...args)); } catch (e) { done(reject)(e); } }, 250);
+    }
+  }).catch(e => { alert('エラーが起きました：' + (e && e.message || e)); throw e; });
+}
+
+// ---- 画面切り替え・自動でホームにもどる ----
+let idleTimer = null;
+const IDLE = { 'v-result': 10000, 'v-admin': 600000 };
+function show(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id));
+  $('print-root').classList.toggle('on', id === 'v-admin' && state.tab === 'labels');
+  resetIdle();
+  kbuf = '';
+  closeCam();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (id === 'v-borrow-book' && state.student && state.student.canBorrow) startCam('cw-borrow', doBorrow);
+  if (id === 'v-return') startCam('cw-return', doReturn);
+  if (id === 'v-login') { $('pin').value = ''; $('pin-err').textContent = ''; setTimeout(() => $('pin').focus(), 80); }
+}
+// 画面の種類：URLの最後に ?page=admin を付けると先生用、何も付けなければ生徒用
+let MODE = 'student';
+function initMode(m) {
+  MODE = m === 'admin' ? 'admin' : 'student';
+  document.body.classList.toggle('mode-admin', MODE === 'admin');
+  if (MODE === 'admin') { $('title').textContent = '📚 大木文庫 管理画面'; document.title = '大木文庫 管理画面'; show('v-login'); }
+}
+function home() {
+  state.sno = ''; state.student = null; closeCam();
+  if (MODE === 'admin') show(state.pin ? 'v-admin' : 'v-login');
+  else show('v-home');
+}
+function resetIdle() {
+  clearTimeout(idleTimer);
+  const cur = document.querySelector('.view.on');
+  if (!cur || cur.id === 'v-home') return;
+  if (MODE === 'admin' && cur.id === 'v-login') return;
+  idleTimer = setTimeout(() => { if (cur.id === 'v-admin') state.pin = null; home(); }, IDLE[cur.id] || 60000);
+}
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, resetIdle, true));
+function tick() {
+  const d = new Date();
+  $('clock').textContent = (d.getMonth() + 1) + '月' + d.getDate() + '日（' + '日月火水木金土'[d.getDay()] + '）';
+}
+tick(); setInterval(tick, 60000);
+
+// ---- 借りる ----
+function startBorrow() { state.sno = ''; renderSno(); $('sno-err').textContent = ''; show('v-student'); }
+const MEMBER_DIGITS = 8;   // 会員番号のけた数
+const fmtNo = s => String(s).replace(/^(\d{4})(\d)/, '$1 $2');
+function renderSno() { $('sno').textContent = state.sno ? fmtNo(state.sno) : ' '; }
+function key(k) {
+  $('sno-err').textContent = '';
+  if (k === 'del') state.sno = state.sno.slice(0, -1);
+  else if (k === 'ok') return submitSno();
+  else if (state.sno.length < MEMBER_DIGITS) state.sno += k;
+  renderSno();
+}
+document.addEventListener('keydown', e => {
+  if (!$('v-student').classList.contains('on')) return;
+  const i = '0123456789０１２３４５６７８９'.indexOf(e.key);
+  if (i >= 0) key(String(i % 10));
+  else if (e.key === 'Backspace') key('del');
+  else if (e.key === 'Enter') key('ok');
+});
+function submitSno() {
+  if (!state.sno) return;
+  if (state.sno.length !== MEMBER_DIGITS) { $('sno-err').textContent = '会員番号は' + MEMBER_DIGITS + '桁です'; return; }
+  api('getStudent', state.sno).then(r => {
+    if (!r.ok) { $('sno-err').textContent = r.msg; state.sno = ''; renderSno(); return; }
+    state.student = r;
+    $('cf-name').textContent = r.student.name + ' さん';
+    $('cf-no').textContent = '会員番号 ' + fmtNo(r.student.no);
+    show('v-confirm');
+  });
+}
+function confirmYes() { renderBorrow(); show('v-borrow-book'); }
+function renderBorrow() {
+  const r = state.student;
+  $('greet').textContent = r.student.name + ' さん';
+  let h = '';
+  if (r.loans.length) {
+    h += '<div class="card"><b>現在借りている本</b><ul>' + r.loans.map(l =>
+      '<li>' + esc(l.title) + ' … <span class="' + (l.overdue ? 'late' : '') + '">' + esc(l.due) + ' まで' + (l.overdue ? '（期限切れ）' : '') + '</span></li>'
+    ).join('') + '</ul></div>';
+  }
+  if (!r.canBorrow) h += '<div class="card stop">' + esc(r.reason) + '</div>';
+  $('my-loans').innerHTML = h;
+  $('borrow-scan').style.display = r.canBorrow ? '' : 'none';
+}
+function doBorrow(code) {
+  api('borrowBook', state.student.student.no, code).then(r => {
+    if (!r.ok) return showResult(false, '借りられませんでした', r.msg, null, false, null, 'borrow');
+    showResult(true, '借りました', '『' + r.title + '』', '返却期限は ' + r.due + ' です', r.more);
+  });
+}
+function continueBorrow() {
+  api('getStudent', state.student.student.no).then(r => { state.student = r; renderBorrow(); show('v-borrow-book'); });
+}
+
+// ---- 返す ----
+function startReturn() { show('v-return'); }
+function doReturn(code) {
+  api('returnBook', code).then(r => {
+    if (!r.ok) return showResult(false, '返却できませんでした', r.msg, null, false, null, 'return');
+    const shelf = r.shelf
+      ? '<div class="shelfbox">この本は<span class="chip" style="background:' + (SHELF_COLOR[r.shelf] || '#eee') + '">' + esc(r.shelf) + '</span>の本棚に戻してください</div>'
+      : '<div class="shelfbox">本を本棚に戻してください</div>';
+    showResult(true, '返却しました', '『' + r.title + '』', null, false,
+      r.late ? '返却期限を過ぎていました。次からは期限までに返してください。' : 'ありがとうございました。', 'return', shelf);
+  });
+}
+
+// ---- 読みとり共通 ----
+function submitScan(id) {
+  const el = $(id), v = el.value.trim();
+  el.value = '';
+  if (!v) return el.focus();
+  ({ 'borrow-code': doBorrow, 'return-code': doReturn, 'isbn-scan': doLookup })[id](v);
+}
+['borrow-code', 'return-code', 'isbn-scan'].forEach(id => {
+  $(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submitScan(id); }
+  });
+});
+// kind: 'return' のときは「続けて返す」ボタンを出す。html は信頼できる固定のHTML（本棚の案内）
+function showResult(ok, msg, sub, due, more, extra, kind, html) {
+  $('result').innerHTML =
+    '<div class="modebar ' + (kind === 'return' ? 'return">📕 本を返す' : 'borrow">📗 本を借りる') + '</div>' +
+    '<div class="result ' + (ok ? 'ok' : 'ng') + '">' +
+    '<div class="icon">' + (ok ? '✅' : '⚠️') + '</div>' +
+    '<div class="msg">' + esc(msg) + '</div>' +
+    '<div class="sub">' + esc(sub) + '</div>' +
+    (due ? '<div class="due">' + esc(due) + '</div>' : '') +
+    (html || '') +
+    (extra ? '<p class="sub" style="font-size:19px;margin-top:16px">' + esc(extra) + '</p>' : '') +
+    '</div><div class="row">' +
+    (more ? '<button class="btn green" onclick="continueBorrow()">続けて借りる</button>' : '') +
+    (kind === 'return' ? '<button class="btn" style="border-color:var(--return);color:var(--return)" onclick="startReturn()">' + (ok ? '続けて返す' : 'もう一度読み取る') + '</button>' : '') +
+    '<button class="btn primary" onclick="home()">終わる</button></div>';
+  show('v-result');
+}
+
+// ---- カメラ ----
+// ① ライブカメラ（かざすだけ）を試す → ② 使えなければ「写真をとって読む」に自動で切りかえ
+const CAMERA_FACING = 'user';   // 'user' = 画面側カメラ（スタンドに立てて使う） / 'environment' = 背面カメラ
+document.querySelectorAll('#cw-borrow input, #cw-return input').forEach(i => i.setAttribute('capture', CAMERA_FACING));
+let cam = null, camModalFn = null, camStarting = Promise.resolve();
+const camFormats = () => [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.CODE_128];
+function startCam(holderId, onText, facing, continuous) {
+  const holder = $(holderId);
+  let lastText = '', lastAt = 0;
+  holder.insertBefore($('reader'), holder.firstChild);
+  holder.classList.remove('failed');
+  if (!window.Html5Qrcode || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { holder.classList.add('failed'); return; }
+  let fired = false;
+  camStarting = camStarting.then(() => {
+    if (!holder.isConnected || !isVisible(holder)) return;   // もう別の画面に移っていたら何もしない
+    const c = new Html5Qrcode('reader', { verbose: false, formatsToSupport: camFormats() });
+    cam = c;
+    return c.start({ facingMode: facing || CAMERA_FACING },
+      { fps: 12, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.7); return { width: s, height: s }; } },
+      text => {
+        if (continuous) {   // 棚卸し：止めずに読み続ける（同じQRは2.5秒無視）
+          const now = Date.now();
+          if (text === lastText && now - lastAt < 2500) return;
+          lastText = text; lastAt = now; onText(text); return;
+        }
+        if (fired) return; fired = true; closeCam(); onText(text);
+      }, () => {})
+      .catch(() => { if (cam === c) cam = null; holder.classList.add('failed'); });
+  });
+}
+function isVisible(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
+function closeCam() {
+  $('cam').classList.remove('on');
+  if (cam) {
+    const c = cam; cam = null;
+    camStarting = camStarting.then(() => c.stop()).then(() => c.clear()).catch(() => {});
+  }
+}
+function openCam(onText) {   // 先生用（ISBN読み取り）
+  camModalFn = onText;
+  $('cam').classList.add('on');
+  startCam('cw-modal', t => { $('cam').classList.remove('on'); onText(t); }, 'environment');
+}
+function scanPhoto(input, onText) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!window.Html5Qrcode) return alert('読みとり機能を読み込めませんでした。番号を入れてください。');
+  $('loading').classList.add('on');
+  new Html5Qrcode('reader-file', { verbose: false, formatsToSupport: camFormats() }).scanFile(file, false)
+    .then(t => { $('loading').classList.remove('on'); onText(t); })
+    .catch(() => { $('loading').classList.remove('on'); alert('読み取れませんでした。QRラベルが大きく、はっきり写るように、もう一度撮ってください。'); });
+}
+
+// ---- バーコードリーダー（入力欄を選ばなくても受けつける） ----
+let kbuf = '';
+document.addEventListener('keydown', e => {
+  const v = (document.querySelector('.view.on') || {}).id;
+  const isInv = v === 'v-admin' && state.tab === 'inv' && invActive;
+  if (v !== 'v-borrow-book' && v !== 'v-return' && !isInv) return;
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const t = kbuf; kbuf = '';
+    if (t) (isInv ? invScan : v === 'v-return' ? doReturn : doBorrow)(t);
+  } else if (e.key.length === 1) kbuf += e.key;
+});
+
+// ---- 先生用 ----
+function login() {
+  const pin = $('pin').value;
+  api('adminLogin', pin).then(r => {
+    if (!r.ok) { $('pin-err').textContent = r.msg; return; }
+    state.pin = pin; setTab('dash'); show('v-admin');
+  });
+}
+function logout() { state.pin = null; home(); }
+$('tabs').addEventListener('click', e => { const t = e.target.dataset.tab; if (t) setTab(t); });
+function setTab(t) {
+  closeCam(); invActive = false; $('cw-inv').style.display = 'none';
+  state.tab = t;
+  document.querySelectorAll('#tabs button[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + t));
+  $('print-root').classList.toggle('on', t === 'labels');
+  if (t === 'dash') loadDash();
+  if (t === 'reg') setTimeout(() => $('isbn-scan').focus(), 80);
+  if (t === 'book') loadBookList();
+  if (t === 'inv') invShowCount();
+}
+function table(cols, rows, rowClass) {
+  if (!rows.length) return '<p class="hint" style="text-align:left">ありません</p>';
+  return '<div class="tw"><table><tr>' + cols.map(c => '<th>' + c[0] + '</th>').join('') + '</tr>' +
+    rows.map(r => '<tr class="' + (rowClass ? rowClass(r) : '') + '">' +
+      cols.map(c => '<td' + (c[2] ? ' class="wrap"' : '') + '>' + esc(c[1](r)) + '</td>').join('') + '</tr>').join('') +
+    '</table></div>';
+}
+function loadDash() {
+  api('getDashboard', state.pin).then(d => {
+    const loanCols = [['会員番号', l => l.sno], ['氏名', l => l.name], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due]];
+    $('p-dash').innerHTML =
+      '<div class="stats">' +
+      '<div class="stat">登録冊数<b>' + d.nBooks + '</b></div>' +
+      '<div class="stat">貸出中<b>' + d.nActive + '</b></div>' +
+      '<div class="stat warn">滞納<b>' + d.nOverdue + '</b></div>' +
+      '<div class="stat">紛失中<b>' + d.nLost + '</b></div>' +
+      '<div class="stat">今年度の貸出<b>' + d.nYear + '</b></div>' +
+      '<div class="stat">今年度借りた人数<b>' + d.nReaders + '</b></div></div>' +
+      '<h3>⚠️ 滞納者（' + d.today + ' 時点）</h3>' +
+      table(loanCols.concat([['遅れ', l => l.late + '日']]), d.overdue, () => 'late') +
+      '<h3>貸出中の本</h3>' + table(loanCols, d.active, l => l.overdue ? 'late' : '') +
+      '<div class="two"><div><h3>よく借りた人（' + d.fyStart + '〜）</h3>' +
+      table([['順位', (r) => d.studentRank.indexOf(r) + 1], ['会員番号', r => r.sno], ['氏名', r => r.name], ['冊数', r => r.n]], d.studentRank) +
+      '</div><div><h3>人気の本（' + d.fyStart + '〜）</h3>' +
+      table([['順位', (r) => d.bookRank.indexOf(r) + 1], ['本', r => r.title, 1], ['回数', r => r.n]], d.bookRank) + '</div></div>';
+  });
+}
+function loadHist() {
+  const sno = $('hist-sno').value.trim();
+  if (!sno) return;
+  api('getStudentHistory', state.pin, sno).then(r => {
+    if (!r.ok) { $('hist-out').innerHTML = '<p class="note">' + esc(r.msg) + '</p>'; return; }
+    $('hist-out').innerHTML = '<h3>' + esc(r.student.name) + '（' + esc(r.student.no) + '）… 全' + r.list.length + '冊</h3>' +
+      table([['管理番号', l => l.bookId], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due], ['返却日', l => l.ret || (l.overdue ? '滞納中' : '貸出中')]],
+        r.list, l => l.overdue ? 'late' : '');
+  });
+}
+function doLookup(code) {
+  api('lookupIsbn', state.pin, code).then(r => {
+    if (!r.ok) { $('reg-note').innerHTML = '<p class="note">' + esc(r.msg) + '</p>'; return; }
+    $('reg-isbn').value = r.isbn; $('reg-title').value = r.title; $('reg-author').value = r.author;
+    let n = r.found ? '<p class="note ok">ISBN ' + r.isbn + '：書名を自動で入れました。まちがいがなければ「登録する」。</p>'
+                    : '<p class="note">ISBN ' + r.isbn + '：書名が見つかりませんでした。手で入れてください。</p>';
+    if (r.dup.length) n += '<p class="note">同じ本がすでに登録されています（' + esc(r.dup.join(', ')) + '）。2冊目として登録する場合はそのまま進めてください。</p>';
+    $('reg-note').innerHTML = n;
+    (r.found ? document.querySelector('#p-reg .btn.green') : $('reg-title')).focus();
+  });
+}
+function manualBook() {
+  ['reg-isbn', 'reg-title', 'reg-author'].forEach(id => $(id).value = '');
+  $('reg-note').innerHTML = '<p class="note">ISBNなしで登録します。タイトルを入れてください。</p>';
+  $('reg-title').focus();
+}
+function doRegister() {
+  const data = { isbn: $('reg-isbn').value, title: $('reg-title').value, author: $('reg-author').value, shelf: state.shelf || '' };
+  api('registerBook', state.pin, data).then(r => {
+    if (!r.ok) { $('reg-note').innerHTML = '<p class="note">' + esc(r.msg) + '</p>'; return; }
+    state.registered.push(r.id);
+    $('reg-note').innerHTML = '<p class="note ok">「' + esc(r.title) + '」を <b>' + r.id + '</b> として登録しました（' + esc(r.shelf) + 'の棚）。つぎの本をどうぞ。</p>';
+    ['reg-isbn', 'reg-title', 'reg-author'].forEach(id => $(id).value = '');
+    $('reg-list').innerHTML = state.registered.slice().reverse().map(esc).join('、') + '（' + state.registered.length + '冊）';
+    $('isbn-scan').focus();
+  });
+}
+function makeLabels(onlyNew) {
+  api('getBooks', state.pin).then(books => {
+    const num = id => /^\d+$/.test(id) ? Number(id) : -1;
+    let list;
+    if (onlyNew) list = books.filter(b => state.registered.indexOf(b.id) >= 0);
+    else {
+      const from = Number($('lb-from').value || 0), to = Number($('lb-to').value || 99999);
+      list = books.filter(b => num(b.id) >= from && num(b.id) <= to);
+    }
+    list = list.filter(b => b.status !== '廃棄');
+    const root = $('print-root');
+    root.innerHTML = '';
+    if (!list.length) { $('lb-msg').textContent = '該当する本がありません'; return; }
+    const skip = Math.min(43, Math.max(0, Number($('lb-skip').value || 1) - 1));
+    const cells = new Array(skip).fill(null).concat(list);   // null = 使用済みの位置（何も印刷しない）
+    $('lb-msg').textContent = list.length + '枚（A4 ' + Math.ceil(cells.length / 44) + 'ページ）' +
+      (skip ? '・1ページ目は ' + (skip + 1) + '枚目から' : '') + '。下のプレビューを確認して「印刷」。';
+    for (let p = 0; p < cells.length; p += 44) {
+      const sheet = document.createElement('div');
+      sheet.className = 'sheet';
+      cells.slice(p, p + 44).forEach(b => {
+        const lab = document.createElement('div');
+        lab.className = 'label';
+        if (b) {
+          lab.innerHTML = '<div class="qr"></div><div class="t"><span class="id">' + shelfTag(b.shelf) + esc(b.id) + '</span>大木文庫<br>' + esc(b.title) + '</div>';
+          new QRCode(lab.querySelector('.qr'), { text: b.id, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+        } else lab.classList.add('used');
+        sheet.appendChild(lab);
+      });
+      root.appendChild(sheet);
+    }
+    root.classList.add('on');
+  });
+}
+
+// ---- 紛失・廃棄 ----
+function loadBook() {
+  const code = $('bk-code').value.trim();
+  if (!code) return;
+  api('getBookInfo', state.pin, code).then(b => {
+    if (!b.ok) { $('bk-out').innerHTML = '<p class="note">' + esc(b.msg) + '</p>'; return; }
+    const tag = b.status ? '<span class="tag bad">' + esc(b.status) + '</span>' : '<span class="tag">貸出できる</span>';
+    const loan = b.loan ? '<p>貸出中：' + esc(b.loan.name) + '（' + esc(b.loan.sno) + '）' + esc(b.loan.due) + ' まで' +
+      (b.loan.overdue ? ' <span class="late">滞納 ' + b.loan.late + '日</span>' : '') + '</p>' : '';
+    const id = esc(b.id);
+    const btns = b.status
+      ? '<button class="btn green small" onclick="setStatus(\'' + id + '\',\'\')">貸出できる状態にもどす</button>'
+      : '<button class="btn small" onclick="setStatus(\'' + id + '\',\'紛失\')">紛失にする</button>' +
+        '<button class="btn small" onclick="setStatus(\'' + id + '\',\'廃棄\')">廃棄にする</button>' +
+        '<button class="btn small" onclick="setStatus(\'' + id + '\',\'貸出禁止\')">貸出禁止にする</button>';
+    $('bk-out').innerHTML = '<div class="bookcard">' + tag + ' <b>' + id + '</b><div class="ttl">' + esc(b.title) + '</div>' +
+      '<div class="hint" style="text-align:left;margin:0">' + esc(b.author) + (b.isbn ? '　ISBN ' + esc(b.isbn) : '') + '　これまでの貸出 ' + b.count + '回</div>' +
+      loan + '<div class="row" style="justify-content:flex-start;margin-top:12px">' + btns + '</div></div>';
+  });
+}
+function setStatus(id, status) {
+  const msg = status ? id + ' を「' + status + '」にします。\n（貸出中の場合、その貸出は「' + status + 'として処理」で締めます）'
+                     : id + ' を貸出できる状態にもどします。';
+  if (!confirm(msg)) return;
+  api('setBooksStatus', state.pin, [id], status).then(() => { $('bk-code').value = id; loadBook(); loadBookList(); });
+}
+function loadBookList() {
+  api('getBooks', state.pin).then(books => {
+    const list = books.filter(b => b.status === '紛失' || b.status === '廃棄');
+    $('bk-list').innerHTML = table([['管理番号', b => b.id], ['本', b => b.title, 1], ['状態', b => b.status]], list);
+  });
+}
+
+// ---- 棚卸し ----
+let invActive = false, invBase = null;
+const INV_KEY = 'ookibunko-inventory';
+function invLoad() { try { return JSON.parse(localStorage.getItem(INV_KEY)) || { scanned: [], unknown: [], started: '' }; } catch (e) { return { scanned: [], unknown: [], started: '' }; } }
+function invSave(d) { try { localStorage.setItem(INV_KEY, JSON.stringify(d)); } catch (e) { /* 保存できなくても続行 */ } }
+let inv = invLoad();
+function normCode(s) {
+  s = String(s || '').replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, '').toUpperCase();
+  return /^\d{1,6}$/.test(s) ? String(Number(s)) : s;
+}
+function invEnsureBase() {
+  return invBase ? Promise.resolve(invBase) : api('getInventoryBase', state.pin).then(b => (invBase = b));
+}
+function invShowCount() {
+  const total = invBase ? invBase.filter(b => b.status !== '廃棄').length : null;
+  $('inv-count').textContent = '読みとり済み ' + inv.scanned.length + (total != null ? ' / ' + total + ' 冊' : ' 冊') +
+    (inv.started ? '（' + inv.started + ' 開始）' : '');
+}
+function invStart() {
+  invEnsureBase().then(() => {
+    if (!inv.started) { const d = new Date(); inv.started = (d.getMonth() + 1) + '/' + d.getDate(); invSave(inv); }
+    invActive = true;
+    $('cw-inv').style.display = '';
+    startCam('cw-inv', invScan, 'environment', true);
+    invShowCount();
+  });
+}
+function invStop() { invActive = false; closeCam(); $('cw-inv').style.display = 'none'; }
+function invScan(raw) {
+  if (!raw) return;
+  invEnsureBase().then(base => {
+    const id = normCode(raw);
+    const b = base.find(x => x.id === id);
+    let html;
+    if (!b) {
+      if (inv.unknown.indexOf(id) < 0) inv.unknown.push(id);
+      beep(false);
+      html = '<div class="inv-ng">？ 「' + esc(raw) + '」は登録されていない番号です</div>';
+    } else if (inv.scanned.indexOf(id) >= 0) {
+      html = '<div class="inv-ok" style="background:#f3eee2">（読みとり済み）' + esc(id) + ' ' + esc(b.title) + '</div>';
+    } else {
+      inv.scanned.push(id);
+      beep(true);
+      html = '<div class="inv-ok">✓ ' + esc(id) + ' ' + esc(b.title) + '</div>';
+    }
+    invSave(inv);
+    $('inv-last').innerHTML = html;
+    invShowCount();
+  });
+}
+function invReset() {
+  if (!confirm('棚卸しの読みとり記録を消して、最初からやりなおしますか？')) return;
+  inv = { scanned: [], unknown: [], started: '' }; invSave(inv);
+  $('inv-last').innerHTML = ''; $('inv-out').innerHTML = ''; invShowCount();
+}
+function invResult() {
+  invStop();
+  invBase = null;   // 最新の貸出状況で照合する
+  invEnsureBase().then(base => {
+    const got = id => inv.scanned.indexOf(id) >= 0;
+    const shelved = b => b.status !== '紛失' && b.status !== '廃棄';   // 本棚にあるはずの本（貸出禁止の本もふくむ）
+    const missing = base.filter(b => !got(b.id) && shelved(b) && !b.loan);
+    const fix = base.filter(b => got(b.id) && (b.loan || b.status === '紛失'));
+    const discarded = base.filter(b => got(b.id) && b.status === '廃棄');
+    const out = base.filter(b => !got(b.id) && b.loan);
+    const T = (list, extra) => table([['管理番号', b => b.id], ['本', b => b.title, 1]].concat(extra || []), list);
+    $('inv-out').innerHTML =
+      '<div class="stats">' +
+      '<div class="stat">本棚で確認<b>' + inv.scanned.length + '</b></div>' +
+      '<div class="stat">貸出中（正常）<b>' + out.length + '</b></div>' +
+      '<div class="stat warn">見つからない<b>' + missing.length + '</b></div>' +
+      '<div class="stat warn">記録とちがう<b>' + fix.length + '</b></div></div>' +
+      '<h3>❌ 本棚に見つからない本（' + missing.length + '冊）</h3>' +
+      '<p class="hint" style="text-align:left">記録では本棚にあるはずの本です。もう一度さがして、見つかったら読みとってください。</p>' +
+      T(missing) +
+      (missing.length ? '<button class="btn small" onclick="invMarkLost()">この' + missing.length + '冊を「紛失」にする</button>' : '') +
+      '<h3>⚠️ 本棚にあったのに「貸出中」「紛失」になっている本（' + fix.length + '冊）</h3>' +
+      '<p class="hint" style="text-align:left">返却の読みとりわすれです。下のボタンで返却済み・貸出できる状態に直せます。</p>' +
+      T(fix, [['記録', b => b.loan ? '貸出中：' + b.loan.name + '（' + b.loan.sno + '）' : b.status]]) +
+      (fix.length ? '<button class="btn green small" onclick="invFix()">この' + fix.length + '冊の記録を直す</button>' : '') +
+      (discarded.length ? '<h3>「廃棄」なのに本棚にあった本</h3>' + T(discarded) : '') +
+      (inv.unknown.length ? '<h3>登録されていない番号</h3><p>' + inv.unknown.map(esc).join('、') + '</p>' : '') +
+      '<h3>貸出中の本（本棚になくて正常）</h3>' +
+      T(out, [['借りている人', b => b.loan.name + '（' + b.loan.sno + '）'], ['期限', b => b.loan.due + (b.loan.overdue ? ' 滞納' : '')]]);
+  });
+}
+function invMarkLost() {
+  const ids = invBase.filter(b => inv.scanned.indexOf(b.id) < 0 && b.status !== '紛失' && b.status !== '廃棄' && !b.loan).map(b => b.id);
+  if (!confirm(ids.length + '冊を「紛失」にします。よろしいですか？')) return;
+  api('setBooksStatus', state.pin, ids, '紛失').then(invResult);
+}
+function invFix() {
+  const ids = invBase.filter(b => inv.scanned.indexOf(b.id) >= 0 && (b.loan || b.status === '紛失')).map(b => b.id);
+  if (!confirm(ids.length + '冊を「返却済み・貸出できる」に直します。よろしいですか？')) return;
+  api('markReturned', state.pin, ids).then(invResult);
+}
+
+// ---- 音（読みとれた合図） ----
+let actx = null;
+function beep(ok) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = ok ? 1200 : 300; g.gain.value = 0.15;
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + (ok ? 0.08 : 0.3));
+  } catch (e) { /* 音が出なくても続行 */ }
+}
+
+// ---- プレビュー用のデモデータ（Apps Script上では使われません） ----
+const MOCK = (() => {
+  if (IS_GAS || USE_API) return null;
+  $('mockbar').style.display = 'block';
+  const day = 86400000, now = Date.now();
+  // Code.gs の DEMO_BOOKS / DEMO_MEMBERS と同じ内容
+  const books = ['かいけつゾロリのドラゴンたいじ', 'ハリー・ポッターと賢者の石', 'こまったさんのスパゲティ', 'ルドルフとイッパイアッテナ', '星の王子さま',
+    'エルマーのぼうけん', 'モモ', 'はてしない物語', '君たちはどう生きるか', '西の魔女が死んだ']
+    .map((t, i) => ({ id: 'DEMO-' + String(i + 1).padStart(2, '0'), title: t, status: '', shelf: ['赤', '黄', '青', '緑', 'Jr'][i % 5] }));
+  const students = { '87698769': '石川真琴', '11111111': 'テスト 花子', '22222222': 'テスト 太郎' };
+  const loans = [
+    { id: 'DEMO-03', sno: '11111111', out: now - 20 * day, due: now - 6 * day, ret: null },
+    { id: 'DEMO-05', sno: '22222222', out: now - 3 * day, due: now + 11 * day, ret: null },
+    { id: 'DEMO-01', sno: '22222222', out: now - 40 * day, due: now - 26 * day, ret: now - 28 * day },
+  ];
+  const f = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + '（' + '日月火水木金土'[d.getDay()] + '）'; };
+  const k = t => new Date(t).toISOString().slice(0, 10);
+  const today = k(now);
+  const bk = c => { c = String(c).toUpperCase(); return /^\d+$/.test(c) ? String(Number(c)) : c; };
+  const view = l => ({ bookId: l.id, title: books.find(b => b.id === l.id).title, sno: l.sno, name: students[l.sno], out: f(l.out), due: f(l.due),
+    dueKey: k(l.due), ret: l.ret ? f(l.ret) : '', overdue: !l.ret && k(l.due) < today, late: l.ret ? 0 : Math.max(0, Math.round((now - l.due) / day)) });
+  const status = sno => {
+    const mine = loans.filter(l => l.sno === sno && !l.ret).map(view);
+    if (mine.some(l => l.overdue)) return { loans: mine, canBorrow: false, reason: '返却期限を過ぎている本があります。先に返却してから借りてください。' };
+    if (mine.length >= 1) return { loans: mine, canBorrow: false, reason: '現在 1冊借りています。同時に借りられるのは1冊までなので、返却してから借りてください。' };
+    return { loans: mine, canBorrow: true, reason: '' };
+  };
+  const pin = p => { if (p !== '0000') throw new Error('PINがちがいます'); };
+  return {
+    getStudent: sno => { sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その会員番号は見つかりません。番号を確認してください。' };
+      return Object.assign({ ok: true, student: { no: sno, name: students[sno] }, max: 1 }, status(sno)); },
+    borrowBook: (sno, code) => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
+      if (b.status) return { ok: false, msg: '『' + b.title + '』は現在貸し出しできません（' + b.status + '）。先生に知らせてください。' };
+      if (loans.some(l => l.id === b.id && !l.ret)) return { ok: false, msg: '『' + b.title + '』は貸出中のままになっています。先に「返す」で返却してから借りてください。' };
+      const s = status(sno); if (!s.canBorrow) return { ok: false, msg: s.reason };
+      loans.push({ id: b.id, sno: sno, out: now, due: now + 14 * day, ret: null });
+      return { ok: true, title: b.title, due: f(now + 14 * day), more: s.loans.length + 1 < 1 }; },
+    returnBook: code => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
+      const found = b.status === '紛失'; if (found) b.status = '';
+      const l = loans.find(x => x.id === b.id && !x.ret);
+      if (!l) return found ? { ok: true, title: b.title, name: '', late: false, shelf: b.shelf } : { ok: false, msg: '『' + b.title + '』は貸出中ではありません（すでに返却済みです）。' };
+      l.ret = now; return { ok: true, title: b.title, name: students[l.sno], late: k(l.due) < today, shelf: b.shelf }; },
+    adminLogin: p => p === '0000' ? { ok: true } : { ok: false, msg: 'PINがちがいます（デモは 0000）' },
+    getDashboard: p => { pin(p); const act = loans.filter(l => !l.ret).map(view); const sc = {}, bc = {};
+      loans.forEach(l => { (sc[l.sno] = sc[l.sno] || { sno: l.sno, name: students[l.sno], n: 0 }).n++; const t = books.find(b => b.id === l.id).title; (bc[l.id] = bc[l.id] || { id: l.id, title: t, n: 0 }).n++; });
+      const top = o => Object.values(o).sort((a, b) => b.n - a.n);
+      return { today: f(now), fyStart: '2026/04/01', nBooks: books.filter(b => !b.status).length, nLost: books.filter(b => b.status === '紛失').length, nActive: act.length, nOverdue: act.filter(l => l.overdue).length,
+        nYear: loans.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
+    getStudentHistory: (p, sno) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その生徒番号は見つかりません。' };
+      return { ok: true, student: { no: sno, name: students[sno] }, list: loans.filter(l => l.sno === sno).map(view).reverse() }; },
+    lookupIsbn: (p, isbn) => { pin(p); isbn = String(isbn).replace(/-/g, ''); if (!/^97[89]\d{10}$/.test(isbn)) return { ok: false, msg: 'ISBN（978 か 979 ではじまる13けた）のバーコードを読みとってください。' };
+      return { ok: true, isbn: isbn, title: 'デモの本（' + isbn.slice(-4) + '）', author: 'デモ 著者', found: true, dup: [] }; },
+    registerBook: (p, d) => { pin(p); if (!d.title) return { ok: false, msg: 'タイトルを入れてください。' };
+      const dd = SHELVES[d.shelf]; if (!dd) return { ok: false, msg: '棚（色）をえらんでください。' };
+      const max = books.map(b => Number(b.id)).filter(n => n > dd * 1000 && n < (dd + 1) * 1000).reduce((a, n) => Math.max(a, n), dd * 1000);
+      const id = String(max + 1);
+      books.push({ id: id, title: d.title, status: d.shelf === '禁' ? '貸出禁止' : '', shelf: d.shelf });
+      return { ok: true, id: id, title: d.title, shelf: d.shelf }; },
+    getBooks: p => { pin(p); return books.map(b => Object.assign({}, b)); },
+    getBookInfo: (p, code) => { pin(p); const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この番号の本は登録されていません。' };
+      const all = loans.filter(l => l.id === b.id), act = all.find(l => !l.ret);
+      return { ok: true, id: b.id, title: b.title, author: '', isbn: '', status: b.status, loan: act ? view(act) : null, count: all.length }; },
+    setBooksStatus: (p, ids, st) => { pin(p); ids.forEach(id => { const b = books.find(x => x.id === bk(id)); if (!b) return; b.status = st;
+      if (st) loans.filter(l => l.id === b.id && !l.ret).forEach(l => { l.ret = now; }); }); return { ok: true, n: ids.length }; },
+    getInventoryBase: p => { pin(p); return books.map(b => { const l = loans.find(x => x.id === b.id && !x.ret); const v = l && view(l);
+      return { id: b.id, title: b.title, status: b.status, loan: v ? { sno: v.sno, name: v.name, due: v.due, overdue: v.overdue } : null }; }); },
+    markReturned: (p, ids) => { pin(p); ids.forEach(id => { loans.filter(l => l.id === id && !l.ret).forEach(l => { l.ret = now; });
+      const b = books.find(x => x.id === id); if (b && b.status === '紛失') b.status = ''; }); return { ok: true, n: ids.length }; },
+  };
+})();
+
+// ---- 起動：URLの ?page=admin で先生用、なければ生徒用 ----
+if (NEED_SETUP) {
+  $('mockbar').textContent = 'この端末はまだ設定されていません。先生が設定用のURL（…#api=〇〇&key=〇〇）を1回開いてください。';
+  $('mockbar').style.cssText = 'display:block;background:#b83227;font-size:16px;padding:8px';
+}
+if (IS_GAS) google.script.url.getLocation(loc => initMode(loc.parameter.page));
+else initMode(new URLSearchParams(location.search).get('page'));
+</script>
+</body>
+</html>
