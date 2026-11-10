@@ -140,6 +140,17 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 .kuji-lucky{font-size:17px}
 .kuji-lucky .chip{display:inline-block;padding:1px 12px;border-radius:8px;font-weight:700}
 .kuji-hint{font-size:15px;color:var(--muted);margin-top:8px}
+/* PCなど横に広い画面の管理画面：幅を広げて、左右に並べる */
+@media (min-width:1100px){
+  body.mode-admin main{max-width:1500px;padding-left:28px;padding-right:28px}
+  .dash-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:28px;align-items:start}
+  .hist-wrap{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:24px;align-items:start}
+  .hist-wrap .st-list{grid-template-columns:1fr}
+  .hist-wrap #hist-list:empty{display:none}
+  .hist-wrap:has(#hist-list:empty){grid-template-columns:1fr}
+  #p-reg .form{max-width:720px}
+  .tabs button{font-size:18px;padding:12px 18px}
+}
 .st-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
 .st-list button{position:relative;text-align:left;padding:8px 12px;border-radius:12px;border:2px solid var(--line);background:#fff;color:var(--ink)}
 .st-list button b{display:block;font-size:17px}
@@ -318,8 +329,10 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
         <input id="hist-q" placeholder="名前 または 会員番号（一部でも可）" style="width:280px" onkeydown="if(event.key==='Enter')searchSt()">
         <button class="btn primary small" onclick="searchSt()">さがす</button>
       </div>
-      <div id="hist-list" style="margin-top:12px"></div>
-      <div id="hist-out" style="margin-top:14px"></div>
+      <div class="hist-wrap">
+        <div id="hist-list" style="margin-top:12px"></div>
+        <div id="hist-out" style="margin-top:14px"></div>
+      </div>
     </div>
 
     <div class="pane" id="p-reg">
@@ -870,8 +883,10 @@ function loadDash() {
       '<div class="stat">貸出中<b>' + d.nActive + '</b></div>' +
       '<div class="stat warn">滞納<b>' + d.nOverdue + '</b></div>' +
       '<div class="stat">紛失中<b>' + d.nLost + '</b></div></div>' +
+      '<div class="dash-row"><div>' +   // PCの広い画面では「滞納者」と「ランキング」を左右に並べる
       '<h3>⚠️ 滞納者（' + d.today + ' 時点）</h3>' +
       table(loanCols.concat([['遅れ', l => l.late + '日']]), d.overdue, () => 'late') +
+      '</div><div>' +
       '<h3>📊 期間を指定して見る</h3>' +
       '<div class="period">' +
       '<div class="inline">' + pbtn('month', '今月') + pbtn('lastmonth', '先月') + pbtn('fy', '今年度') + pbtn('lastfy', '昨年度') + pbtn('all', '全期間') + '</div>' +
@@ -887,6 +902,7 @@ function loadDash() {
       table([['順位', (r) => d.studentRank.indexOf(r) + 1], ['会員番号', r => r.sno], ['氏名', r => r.name], ['冊数', r => r.n]], d.studentRank) +
       '</div><div><h3>人気の本（' + range + '）</h3>' +
       table([['順位', (r) => d.bookRank.indexOf(r) + 1], ['本', r => r.title, 1], ['回数', r => r.n]], d.bookRank) + '</div></div>' +
+      '</div></div>' +
       '<h3>貸出中の本（' + d.active.length + '冊・期限の近い順）</h3>' + table(loanCols, d.active, l => l.overdue ? 'late' : '');
   });
 }
