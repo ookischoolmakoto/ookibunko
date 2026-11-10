@@ -140,6 +140,11 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 .kuji-lucky{font-size:17px}
 .kuji-lucky .chip{display:inline-block;padding:1px 12px;border-radius:8px;font-weight:700}
 .kuji-hint{font-size:15px;color:var(--muted);margin-top:8px}
+.st-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.st-list button{position:relative;text-align:left;padding:8px 12px;border-radius:12px;border:2px solid var(--line);background:#fff;color:var(--ink)}
+.st-list button b{display:block;font-size:17px}
+.st-list button span{font-size:12px;color:var(--muted)}
+.st-list button i{position:absolute;top:4px;right:6px;font-style:normal;font-size:10px;background:#fff3cd;color:#8a5a00;border-radius:4px;padding:0 4px}
 .inv-modes{display:flex;gap:0;margin:0 0 12px;border:2px solid var(--accent);border-radius:12px;overflow:hidden;max-width:520px}
 .inv-modes button{flex:1;font-size:16px;padding:10px;border:0;background:#fff;color:var(--accent)}
 .inv-modes button.on{background:var(--accent);color:#fff;font-weight:700}
@@ -294,7 +299,7 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
   <section id="v-admin" class="view">
     <div class="tabs" id="tabs">
       <button data-tab="dash" class="on">貸出状況</button>
-      <button data-tab="hist">生徒の記録</button>
+      <button data-tab="hist">生徒（貸出・返却）</button>
       <button data-tab="reg">本の登録</button>
       <button data-tab="labels">ラベル印刷</button>
       <button data-tab="book">紛失・廃棄</button>
@@ -307,9 +312,13 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 
     <div class="pane" id="p-hist">
       <div class="inline">
-        <input id="hist-sno" inputmode="numeric" placeholder="会員番号" style="width:160px" onkeydown="if(event.key==='Enter')loadHist()">
-        <button class="btn primary small" onclick="loadHist()">表示</button>
+        <select id="hist-grade" style="font-size:17px;padding:8px;border:2px solid var(--line);border-radius:10px" onchange="searchSt()">
+          <option value="">学年（すべて）</option>
+        </select>
+        <input id="hist-q" placeholder="名前 または 会員番号（一部でも可）" style="width:280px" onkeydown="if(event.key==='Enter')searchSt()">
+        <button class="btn primary small" onclick="searchSt()">さがす</button>
       </div>
+      <div id="hist-list" style="margin-top:12px"></div>
       <div id="hist-out" style="margin-top:14px"></div>
     </div>
 
@@ -821,6 +830,7 @@ function setTab(t) {
   $('print-root').classList.toggle('on', t === 'labels');
   if (t === 'dash') loadDash();
   if (t === 'reg') setTimeout(() => $('isbn-scan').focus(), 80);
+  if (t === 'hist') { searchSt(true); setTimeout(() => $('hist-q').focus(), 80); }
   if (t === 'book') loadBookList();
   if (t === 'inv') { invShowCount(); if (invModeNow === 'tap') invRenderTap(); }
 }
@@ -931,14 +941,71 @@ function printPoster() {
   w.document.open(); w.document.write(html); w.document.close();
 }
 function setPeriodVals(kind) { [state.from, state.to] = periodPreset(kind); state.period = kind; }
-function loadHist() {
-  const sno = $('hist-sno').value.trim();
+// ---- 生徒をさがす → 記録を見る・先生が貸し出す／返す ----
+function searchSt(first) {
+  const q = $('hist-q').value.trim(), grade = $('hist-grade').value;
+  api('searchStudents', state.pin, q, grade).then(r => {
+    const sel = $('hist-grade');
+    if (sel.options.length <= 1 && r.grades.length) {
+      sel.innerHTML = '<option value="">学年（すべて）</option>' + r.grades.map(g => '<option>' + esc(g) + '</option>').join('');
+      sel.value = grade;
+    }
+    if (first) return;
+    if (!q && !grade) { $('hist-list').innerHTML = '<p class="hint" style="text-align:left">名前・会員番号を入れるか、学年をえらんでください。</p>'; return; }
+    if (!r.list.length) { $('hist-list').innerHTML = '<p class="note">見つかりませんでした。</p>'; return; }
+    if (r.list.length === 1) { $('hist-list').innerHTML = ''; return loadHist(r.list[0].no); }
+    $('hist-list').innerHTML = '<p class="hint" style="text-align:left;margin:4px 0">' + r.total + '人' + (r.total > r.list.length ? '（はじめの' + r.list.length + '人を表示）' : '') + '：名前を押すと記録が出ます</p>' +
+      '<div class="st-list">' + r.list.map(s =>
+        '<button onclick="loadHist(\'' + esc(s.no) + '\')"><b>' + esc(s.name) + '</b><span>' + esc(s.no) + '　' + esc(s.grade) + (s.cls ? ' ' + esc(s.cls) : '') + '</span>' +
+        (s.loans ? '<i>貸出中 ' + s.loans + '冊</i>' : '') + '</button>').join('') + '</div>';
+    $('hist-out').innerHTML = '';
+  });
+}
+function loadHist(sno, msg) {
   if (!sno) return;
+  state.histNo = sno;
   api('getStudentHistory', state.pin, sno).then(r => {
     if (!r.ok) { $('hist-out').innerHTML = '<p class="note">' + esc(r.msg) + '</p>'; return; }
-    $('hist-out').innerHTML = '<h3>' + esc(r.student.name) + '（' + esc(r.student.no) + '）… 全' + r.list.length + '冊</h3>' +
-      table([['管理番号', l => l.bookId], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due], ['返却日', l => l.ret || (l.overdue ? '滞納中' : '貸出中')]],
-        r.list, l => l.overdue ? 'late' : '');
+    const act = r.list.filter(l => !l.ret), past = r.list.filter(l => l.ret);
+    $('hist-out').innerHTML = (msg || '') +
+      '<div class="bookcard" style="max-width:none"><div class="ttl">' + esc(r.student.name) + ' さん</div>' +
+      '<div class="hint" style="text-align:left;margin:0">会員番号 ' + esc(r.student.no) + '　' + esc(r.student.grade) + (r.student.cls ? ' ' + esc(r.student.cls) : '') +
+      '　これまで ' + r.list.length + '冊</div>' +
+      '<h3>いま借りている本（' + act.length + '冊）</h3>' +
+      (act.length ? '<div class="tw"><table><tr><th>管理番号</th><th>本</th><th>貸出日</th><th>期限</th><th></th></tr>' + act.map(l =>
+        '<tr class="' + (l.overdue ? 'late' : '') + '"><td>' + esc(l.bookId) + '</td><td class="wrap">' + esc(l.title) + '</td><td>' + esc(l.out) + '</td>' +
+        '<td>' + esc(l.due) + (l.overdue ? '（' + l.late + '日遅れ）' : '') + '</td>' +
+        '<td><button class="btn small" style="border-color:var(--return);color:var(--return)" onclick="adminRet(\'' + esc(l.bookId) + '\')">返却する</button></td></tr>').join('') +
+        '</table></div>' : '<p class="hint" style="text-align:left">ありません</p>') +
+      '<h3>本を貸し出す</h3>' +
+      (r.canBorrow ? '' : '<p class="note">' + esc(r.reason) + '（先生の判断で貸し出すこともできます）</p>') +
+      '<div class="inline"><input id="hist-book" placeholder="管理番号（1012 など）" style="width:200px" onkeydown="if(event.key===\'Enter\')adminLend()">' +
+      '<button class="btn small" onclick="openCam(t => { $(\'hist-book\').value = t; adminLend(); })">📷 読む</button>' +
+      '<button class="btn green small" onclick="adminLend()">貸し出す</button></div>' +
+      '<h3>これまでに借りた本</h3>' +
+      table([['管理番号', l => l.bookId], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due], ['返却日', l => l.ret]], past) +
+      '</div>';
+  });
+}
+function adminLend(force) {
+  const code = ($('hist-book') && $('hist-book').value.trim()) || '';
+  if (!code) return $('hist-book').focus();
+  api('adminBorrow', state.pin, state.histNo, code, !!force).then(r => {
+    if (!r.ok) {
+      if (r.canForce && !force && confirm(r.msg + '\n\n先生の判断で貸し出しますか？')) return adminLend(true);
+      if (!r.canForce || force) alert(r.msg);
+      return;
+    }
+    chime(true);
+    loadHist(state.histNo, '<p class="note ok">『' + esc(r.title) + '』を貸し出しました（返却期限 ' + esc(r.due) + '）。</p>');
+  });
+}
+function adminRet(bookId) {
+  if (!confirm(bookId + ' を返却済みにしますか？')) return;
+  api('adminReturn', state.pin, bookId).then(r => {
+    if (!r.ok) return alert(r.msg);
+    chime(true);
+    loadHist(state.histNo, '<p class="note ok">『' + esc(r.title) + '』を返却しました' + (r.shelf ? '（' + esc(r.shelf) + 'の本棚へ）' : '') + '。</p>');
   });
 }
 function doLookup(code) {
@@ -1253,10 +1320,10 @@ const MOCK = (() => {
   return {
     getStudent: sno => { sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その会員番号は見つかりません。番号を確認してください。' };
       return Object.assign({ ok: true, student: { no: sno, name: students[sno] }, max: 1 }, status(sno)); },
-    borrowBook: (sno, code) => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
+    borrowBook: (sno, code, force) => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
       if (b.status) return { ok: false, msg: '『' + b.title + '』は現在貸し出しできません（' + b.status + '）。先生に知らせてください。' };
       if (loans.some(l => l.id === b.id && !l.ret)) return { ok: false, msg: '『' + b.title + '』は貸出中のままになっています。先に「返す」で返却してから借りてください。' };
-      const s = status(sno); if (!s.canBorrow) return { ok: false, msg: s.reason };
+      const s = status(sno); if (!s.canBorrow && !force) return { ok: false, msg: s.reason, canForce: true };
       loans.push({ id: b.id, sno: sno, out: now, due: now + 14 * day, ret: null });
       return { ok: true, title: b.title, due: f(now + 14 * day), more: s.loans.length + 1 < 1 }; },
     returnBook: code => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
@@ -1273,7 +1340,15 @@ const MOCK = (() => {
       return { today: f(now), from: from, to: to, nBooks: books.filter(b => !b.status).length, nLost: books.filter(b => b.status === '紛失').length, nActive: act.length, nOverdue: act.filter(l => l.overdue).length,
         nYear: inRange.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
     getStudentHistory: (p, sno) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その生徒番号は見つかりません。' };
-      return { ok: true, student: { no: sno, name: students[sno] }, list: loans.filter(l => l.sno === sno).map(view).reverse() }; },
+      const s = status(sno);
+      return { ok: true, student: { no: sno, name: students[sno], grade: 'テスト', cls: '' }, list: loans.filter(l => l.sno === sno).map(view).reverse(), canBorrow: s.canBorrow, reason: s.reason, max: 1 }; },
+    searchStudents: (p, q, g) => { pin(p); q = String(q || ''); const grades = ['テスト'];
+      if (!q && !g) return { ok: true, grades: grades, list: [], total: 0 };
+      const list = Object.keys(students).filter(no => (!g || g === 'テスト') && (!q || students[no].indexOf(q) >= 0 || no.indexOf(q) >= 0))
+        .map(no => ({ no: no, name: students[no], grade: 'テスト', cls: '', loans: loans.filter(l => l.sno === no && !l.ret).length }));
+      return { ok: true, grades: grades, list: list, total: list.length }; },
+    adminBorrow: (p, sno, code, force) => { pin(p); return MOCK.borrowBook(sno, code, force); },
+    adminReturn: (p, code) => { pin(p); return MOCK.returnBook(code); },
     lookupIsbn: (p, isbn) => { pin(p); isbn = String(isbn).replace(/-/g, ''); if (!/^97[89]\d{10}$/.test(isbn)) return { ok: false, msg: 'ISBN（978 か 979 ではじまる13けた）のバーコードを読みとってください。' };
       return { ok: true, isbn: isbn, title: 'デモの本（' + isbn.slice(-4) + '）', author: 'デモ 著者', found: true, dup: [] }; },
     registerBook: (p, d) => { pin(p); if (!d.title) return { ok: false, msg: 'タイトルを入れてください。' };
