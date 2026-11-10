@@ -128,6 +128,18 @@ details.manual{margin-top:12px}
 details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding:6px}
 .shelfbox{display:inline-block;margin-top:16px;background:#fff;border-radius:16px;padding:12px 22px;font-size:24px;font-weight:700}
 .shelfbox .chip{display:inline-block;padding:2px 14px;border-radius:10px;margin:0 6px}
+.kuji-btn{margin-top:18px;font-size:26px;padding:16px 34px;background:#fff6e0;border:3px solid #d4a017;color:#8a5a00;font-weight:700}
+.kuji-note{margin-top:16px;font-size:18px;color:var(--muted)}
+.kuji-box{font-size:90px;margin-top:12px;display:inline-block}
+.shake{animation:shake .25s infinite}
+@keyframes shake{0%{transform:rotate(-12deg)}50%{transform:rotate(12deg)}100%{transform:rotate(-12deg)}}
+.kuji-card{margin:18px auto 0;max-width:460px;background:#fffdf6;border:3px solid #c0392b;border-radius:18px;padding:16px 20px;animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.kuji-rank{font-size:64px;font-weight:700;letter-spacing:.2em;line-height:1.1}
+.kuji-msg{font-size:20px;margin:10px 0;line-height:1.6}
+.kuji-lucky{font-size:17px}
+.kuji-lucky .chip{display:inline-block;padding:1px 12px;border-radius:8px;font-weight:700}
+.kuji-hint{font-size:15px;color:var(--muted);margin-top:8px}
 .inv-ok{background:var(--ok-bg);border-radius:12px;padding:10px 14px;font-size:18px}
 .inv-ng{background:var(--danger-bg);border-radius:12px;padding:10px 14px;font-size:18px}
 .bookcard{background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px 18px;max-width:560px}
@@ -579,9 +591,66 @@ function doReturn(code) {
     const shelf = r.shelf
       ? '<div class="shelfbox">この本は<span class="chip" style="background:' + (SHELF_COLOR[r.shelf] || '#eee') + '">' + esc(r.shelf) + '</span>の本棚に戻してください</div>'
       : '<div class="shelfbox">本を本棚に戻してください</div>';
+    // 期限内に返したときだけ、おみくじが引ける
+    const kuji = r.late
+      ? '<p class="kuji-note">🎴 期限内に返すと、おみくじが引けます</p>'
+      : '<div id="kuji"><button class="btn kuji-btn" onclick="drawOmikuji()">🎴 おみくじを引く</button></div>';
     showResult(true, '返却しました', '『' + r.title + '』', null, false,
-      r.late ? '返却期限を過ぎていました。次からは期限までに返してください。' : 'ありがとうございました。', 'return', shelf);
+      r.late ? '返却期限を過ぎていました。次からは期限までに返してください。' : 'ありがとうございました。', 'return', shelf + kuji);
   });
+}
+
+// ---- おみくじ（期限内に返したときのごほうび） ----
+// [運勢, 出る割合, 色, 一言の候補]
+const OMIKUJI = [
+  ['大吉', 15, '#c0392b', ['今日は最高の読書日和です。気になっていた本に挑戦すると、大きな発見があります。',
+    '本の中で、一生の友だちになる登場人物に出会えそうです。', 'あなたの読書力がぐんと伸びる日です。少し厚い本にもチャレンジしてみましょう。']],
+  ['中吉', 25, '#d35400', ['いつもとちがうジャンルの本に、うれしい出会いがあります。',
+    '読み終わった本の感想を友だちに話すと、さらに運気が上がります。', '表紙が気になった本を手に取ってみましょう。当たりの予感です。']],
+  ['小吉', 25, '#b7950b', ['短いお話をたくさん読むと、よいことがあります。',
+    'シリーズものの続きを読むと、楽しさが倍になります。', '寝る前の10分読書が、明日の元気になります。']],
+  ['吉', 25, '#2f7d5b', ['同じ作者のほかの本を探してみましょう。新しい発見があります。',
+    '本で知った言葉を、今日どこかで使ってみましょう。', '先生や友だちのおすすめの本に、よい出会いがあります。']],
+  ['末吉', 10, '#3a5a8c', ['ゆっくり読むほど、運が開けていきます。あせらずに。',
+    '前に途中でやめた本を、もう一度開いてみましょう。今ならおもしろく読めます。', '一日一ページでも大丈夫。続けることが大切です。']],
+];
+const LUCKY_ITEMS = ['しおり', '鉛筆', '辞書', 'ノート', '水筒', 'ハンカチ', '消しゴム', '付せん'];
+function drawOmikuji() {
+  const box = $('kuji');
+  if (!box || box.dataset.done) return;
+  box.dataset.done = '1';
+  clearInterval(resultTimer);
+  box.innerHTML = '<div class="kuji-box shake">🎴</div><p class="hint">ガラガラ…</p>';
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  let x = Math.random() * 100, f = OMIKUJI[OMIKUJI.length - 1];
+  for (const o of OMIKUJI) { if ((x -= o[1]) < 0) { f = o; break; } }
+  const shelves = Object.keys(SHELVES).filter(k => k !== '禁');
+  const shelf = pick(shelves);
+  setTimeout(() => {
+    box.innerHTML = '<div class="kuji-card">' +
+      '<div class="kuji-rank" style="color:' + f[2] + '">' + f[0] + '</div>' +
+      '<div class="kuji-msg">' + esc(pick(f[3])) + '</div>' +
+      '<div class="kuji-lucky">ラッキー本棚：<span class="chip" style="background:' + SHELF_COLOR[shelf] + '">' + esc(shelf) + '</span>' +
+      '　ラッキーアイテム：' + esc(pick(LUCKY_ITEMS)) + '</div>' +
+      '<div class="kuji-hint">次はラッキー本棚から1冊借りてみましょう</div></div>';
+    if (f[0] === '大吉') fanfare(); else chime(true);
+    startResultCountdown(15);   // 読む時間をとって15秒でもどる
+  }, 1300);
+}
+// 大吉のときの音（ド・ミ・ソ・ド）
+function fanfare() {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    [523, 659, 784, 1047].forEach((fq, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i * 0.13;
+      o.frequency.value = fq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (i === 3 ? 0.7 : 0.25));
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t + 0.8);
+    });
+  } catch (e) { /* 音が出なくても続行 */ }
 }
 
 // ---- 読みとり共通 ----
@@ -618,9 +687,9 @@ function showResult(ok, msg, sub, due, more, extra, kind, html) {
 }
 // 結果画面は10秒で最初の画面に自動でもどる（画面をさわっても延びない）
 let resultTimer = null;
-function startResultCountdown() {
+function startResultCountdown(sec) {
   clearInterval(resultTimer);
-  let n = 10;
+  let n = sec || 10;
   const step = () => {
     if (!$('v-result').classList.contains('on')) return clearInterval(resultTimer);
     if (n <= 0) { clearInterval(resultTimer); return home(); }
@@ -745,6 +814,7 @@ function applyPeriod() { state.from = $('pd-from').value; state.to = $('pd-to').
 function loadDash() {
   if (!state.from) setPeriodVals('fy');
   api('getDashboard', state.pin, state.from, state.to).then(d => {
+    state.dash = d;
     const loanCols = [['会員番号', l => l.sno], ['氏名', l => l.name], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due]];
     const sl = s => s.replace(/-/g, '/');
     const range = d.from <= '2000-01-01' ? '全期間' : sl(d.from) + '〜' + sl(d.to);
@@ -761,7 +831,10 @@ function loadDash() {
       '<div class="period">' +
       '<div class="inline">' + pbtn('month', '今月') + pbtn('lastmonth', '先月') + pbtn('fy', '今年度') + pbtn('lastfy', '昨年度') + pbtn('all', '全期間') + '</div>' +
       '<div class="inline" style="margin-top:8px"><input type="date" id="pd-from" value="' + esc(d.from <= '2000-01-01' ? '' : d.from) + '">〜' +
-      '<input type="date" id="pd-to" value="' + esc(d.to) + '"><button class="btn small" onclick="applyPeriod()">この期間で表示</button></div></div>' +
+      '<input type="date" id="pd-to" value="' + esc(d.to) + '"><button class="btn small" onclick="applyPeriod()">この期間で表示</button></div>' +
+      '<div class="inline" style="margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">' +
+      '<button class="btn small green" onclick="printPoster()">🖨 掲示用ポスターを印刷</button>' +
+      '<label style="font-size:15px"><input type="checkbox" id="pd-readers" style="width:auto"> よく借りた人も載せる（名前が出ます）</label></div></div>' +
       '<div class="stats" style="margin-top:12px">' +
       '<div class="stat">貸出回数（' + range + '）<b>' + d.nYear + '</b></div>' +
       '<div class="stat">借りた人数（' + range + '）<b>' + d.nReaders + '</b></div></div>' +
@@ -771,6 +844,56 @@ function loadDash() {
       table([['順位', (r) => d.bookRank.indexOf(r) + 1], ['本', r => r.title, 1], ['回数', r => r.n]], d.bookRank) + '</div></div>' +
       '<h3>貸出中の本（' + d.active.length + '冊・期限の近い順）</h3>' + table(loanCols, d.active, l => l.overdue ? 'late' : '');
   });
+}
+// ---- 掲示用ポスター（A4たて）。いま表示している期間のランキングで作る ----
+function posterTitleRange(d) {
+  if (d.from <= '2000-01-01') return 'これまでの';
+  const [fy, fm, fd] = d.from.split('-').map(Number), [ty, tm, td] = d.to.split('-').map(Number);
+  if (state.period === 'fy' || state.period === 'lastfy') return fy + '年度の';
+  if (fy === ty && fm === tm && fd === 1) return fy + '年' + fm + '月の';
+  return fm + '/' + fd + '〜' + tm + '/' + td + 'の';
+}
+function rankNo(list, i) {   // 同じ回数は同じ順位にする
+  let r = i; while (r > 0 && list[r - 1].n === list[i].n) r--; return r + 1;
+}
+function printPoster() {
+  const d = state.dash;
+  if (!d) return;
+  const books = d.bookRank.slice(0, 10);
+  if (!books.length) return alert('この期間に借りられた本がありません。期間を変えてください。');
+  const withReaders = $('pd-readers') && $('pd-readers').checked;
+  const medal = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : '<span class="no">' + r + '</span>';
+  const chip = s => s ? '<span class="chip" style="background:' + (SHELF_COLOR[s] || '#eee') + '">' + esc(s) + '</span>' : '';
+  const rows = books.map((b, i) => { const r = rankNo(books, i);
+    return '<tr class="' + (r <= 3 ? 'top' : '') + '"><td class="m">' + medal(r) + '</td><td class="t">' + esc(b.title) + '</td>' +
+      '<td class="s">' + chip(b.shelf) + '<span class="id">' + esc(/^\d+$/.test(b.id) ? b.id : '') + '</span></td><td class="n">' + b.n + '回</td></tr>'; }).join('');
+  const readers = withReaders ? d.studentRank.slice(0, 5) : [];
+  const rrows = readers.map((s, i) => '<li>' + medal(rankNo(readers, i)) + ' ' + esc(s.name) + ' さん　<b>' + s.n + '冊</b></li>').join('');
+  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>大木文庫 人気ランキング</title><style>' +
+    '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}' +
+    'body{margin:0;font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;color:#2b2a27;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.p{max-width:186mm;margin:0 auto;border:5px solid #c4682b;border-radius:16px;padding:9mm 9mm 7mm}' +
+    'h1{margin:0;text-align:center;font-size:40px;letter-spacing:.08em}h1 small{display:block;font-size:22px;color:#c4682b;letter-spacing:.1em;margin-bottom:4px}' +
+    '.lead{text-align:center;font-size:17px;color:#7a746a;margin:6px 0 14px}' +
+    'table{width:100%;border-collapse:collapse}td{padding:8px 6px;border-bottom:2px dotted #e6dfd0;font-size:20px;vertical-align:middle}' +
+    'tr.top td{font-size:24px;font-weight:700}td.m{width:52px;text-align:center;font-size:30px}tr.top td.m{font-size:40px}' +
+    '.no{display:inline-block;width:34px;height:34px;line-height:34px;border-radius:50%;background:#f3eee2;font-size:18px;font-weight:700}' +
+    'td.s{white-space:nowrap;text-align:right;font-size:16px}td.n{white-space:nowrap;text-align:right;width:70px;color:#c4682b;font-weight:700}' +
+    '.chip{display:inline-block;padding:2px 12px;border-radius:8px;font-weight:700;margin-right:6px}.id{color:#7a746a}' +
+    'h2{font-size:22px;margin:16px 0 6px}ul{list-style:none;padding:0;margin:0;font-size:19px;columns:2}li{margin:4px 0}' +
+    '.foot{margin-top:14px;display:flex;gap:10px}.foot div{flex:1;background:#fff6e0;border-radius:12px;padding:10px 12px;font-size:16px;line-height:1.5}' +
+    '.foot b{font-size:18px}.btn{display:block;margin:10px auto;font-size:18px;padding:10px 24px}@media print{.btn{display:none}}' +
+    '</style></head><body><button class="btn" onclick="print()">🖨 印刷する</button><div class="p">' +
+    '<h1><small>📚 大木文庫</small>' + esc(posterTitleRange(d)) + '人気の本</h1>' +
+    '<p class="lead">この期間に ' + d.nYear + '回 貸し出されました（' + d.nReaders + '人が借りました）</p>' +
+    '<table>' + rows + '</table>' +
+    (rrows ? '<h2>📖 たくさん借りた人</h2><ul>' + rrows + '</ul>' : '') +
+    '<div class="foot"><div><b>色＝本棚の色</b><br>ランキングの本は、その色の本棚にあります。</div>' +
+    '<div><b>🎴 返すときはおみくじ</b><br>期限内に返すと、おみくじが引けます。</div></div>' +
+    '</div></body></html>';
+  const w = window.open('', '_blank');
+  if (!w) return alert('ポスターの画面を開けませんでした。ポップアップを許可してください。');
+  w.document.open(); w.document.write(html); w.document.close();
 }
 function setPeriodVals(kind) { [state.from, state.to] = periodPreset(kind); state.period = kind; }
 function loadHist() {
@@ -1061,7 +1184,7 @@ const MOCK = (() => {
     getDashboard: (p, from, to) => { pin(p); const act = loans.filter(l => !l.ret).map(view); const sc = {}, bc = {};
       from = from || '2026-04-01'; to = to || today;
       const inRange = loans.filter(l => k(l.out) >= from && k(l.out) <= to);
-      inRange.forEach(l => { (sc[l.sno] = sc[l.sno] || { sno: l.sno, name: students[l.sno], n: 0 }).n++; const t = books.find(b => b.id === l.id).title; (bc[l.id] = bc[l.id] || { id: l.id, title: t, n: 0 }).n++; });
+      inRange.forEach(l => { (sc[l.sno] = sc[l.sno] || { sno: l.sno, name: students[l.sno], n: 0 }).n++; const t = books.find(b => b.id === l.id).title; (bc[l.id] = bc[l.id] || { id: l.id, title: t, n: 0, shelf: books.find(b => b.id === l.id).shelf }).n++; });
       const top = o => Object.values(o).sort((a, b) => b.n - a.n);
       return { today: f(now), from: from, to: to, nBooks: books.filter(b => !b.status).length, nLost: books.filter(b => b.status === '紛失').length, nActive: act.length, nOverdue: act.filter(l => l.overdue).length,
         nYear: inRange.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
