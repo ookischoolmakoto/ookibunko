@@ -862,10 +862,17 @@ function periodPreset(kind) {
   return {
     month: [new Date(y, m, 1), now],
     lastmonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
+    two: [new Date(y, m - 1, 1), now],                      // 先月と今月
+    lasttwo: [new Date(y, m - 2, 1), new Date(y, m, 0)],    // その前の2か月（例：11月なら9・10月）
     fy: [new Date(fy, 3, 1), now],
     lastfy: [new Date(fy - 1, 3, 1), new Date(fy, 2, 31)],
     all: [new Date(2000, 0, 1), now],
   }[kind].map(ymd);
+}
+// 2か月ボタンの名前（11月なら「10・11月」「9・10月」）
+function twoLabel(back) {
+  const now = new Date(), a = new Date(now.getFullYear(), now.getMonth() - 1 - back, 1), b = new Date(now.getFullYear(), now.getMonth() - back, 1);
+  return (a.getMonth() + 1) + '・' + (b.getMonth() + 1) + '月';
 }
 function setPeriod(kind) { [state.from, state.to] = periodPreset(kind); state.period = kind; loadDash(); }
 function applyPeriod() { state.from = $('pd-from').value; state.to = $('pd-to').value; state.period = ''; loadDash(); }
@@ -889,7 +896,7 @@ function loadDash() {
       '</div><div>' +
       '<h3>📊 期間を指定して見る</h3>' +
       '<div class="period">' +
-      '<div class="inline">' + pbtn('month', '今月') + pbtn('lastmonth', '先月') + pbtn('fy', '今年度') + pbtn('lastfy', '昨年度') + pbtn('all', '全期間') + '</div>' +
+      '<div class="inline">' + pbtn('month', '今月') + pbtn('lastmonth', '先月') + pbtn('two', twoLabel(0)) + pbtn('lasttwo', twoLabel(1)) + pbtn('fy', '今年度') + pbtn('lastfy', '昨年度') + pbtn('all', '全期間') + '</div>' +
       '<div class="inline" style="margin-top:8px"><input type="date" id="pd-from" value="' + esc(d.from <= '2000-01-01' ? '' : d.from) + '">〜' +
       '<input type="date" id="pd-to" value="' + esc(d.to) + '"><button class="btn small" onclick="applyPeriod()">この期間で表示</button></div>' +
       '<div class="inline" style="margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">' +
@@ -907,15 +914,26 @@ function loadDash() {
   });
 }
 // ---- 掲示用ポスター（A4たて）。いま表示している期間のランキングで作る ----
-function posterTitleRange(d) {
-  if (d.from <= '2000-01-01') return 'これまでの';
-  const [fy, fm, fd] = d.from.split('-').map(Number), [ty, tm, td] = d.to.split('-').map(Number);
-  if (state.period === 'fy' || state.period === 'lastfy') return fy + '年度の';
-  if (fy === ty && fm === tm && fd === 1) return fy + '年' + fm + '月の';
-  return fm + '/' + fd + '〜' + tm + '/' + td + 'の';
-}
 function rankNo(list, i) {   // 同じ回数は同じ順位にする
   let r = i; while (r > 0 && list[r - 1].n === list[i].n) r--; return r + 1;
+}
+function posterWhen(d) {
+  if (d.from <= '2000-01-01') return { head: 'これまでの', sub: 'これまでの全期間' };
+  const [fy, fm, fd] = d.from.split('-').map(Number), [ty, tm, td] = d.to.split('-').map(Number);
+  const sub = fy + '年' + fm + '月' + fd + '日〜' + (ty !== fy ? ty + '年' : '') + tm + '月' + td + '日';
+  if (state.period === 'fy' || state.period === 'lastfy') return { head: fy + '年度の', sub: sub };
+  if (fy === ty && fm === tm && fd === 1) return { head: fm + '月の', sub: sub };
+  // 月の1日から、月末（または今日）までなら「9・10月の」「9〜11月の」
+  const monthEnd = td === new Date(ty, tm, 0).getDate() || d.to === ymd(new Date());
+  const span = (ty - fy) * 12 + (tm - fm) + 1;
+  if (fd === 1 && monthEnd && span >= 2 && span <= 6) return { head: (span === 2 ? fm + '・' + tm : fm + '〜' + tm) + '月の', sub: sub };
+  return { head: fm + '/' + fd + '〜' + tm + '/' + td + 'の', sub: sub };
+}
+// 書名を「本題」と「副題・巻数」に分ける（例：鹿の王　生き残った者（上）→ 鹿の王 ／ 生き残った者（上））
+function splitTitle(t) {
+  t = String(t || '').trim();
+  const m = t.match(/^(.{2,}?)[ 　]+(.+)$/);
+  return m ? { main: m[1], sub: m[2] } : { main: t, sub: '' };
 }
 function printPoster() {
   const d = state.dash;
@@ -923,35 +941,123 @@ function printPoster() {
   const books = d.bookRank.slice(0, 10);
   if (!books.length) return alert('この期間に借りられた本がありません。期間を変えてください。');
   const withReaders = $('pd-readers') && $('pd-readers').checked;
-  const medal = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : '<span class="no">' + r + '</span>';
-  const chip = s => s ? '<span class="chip" style="background:' + (SHELF_COLOR[s] || '#eee') + '">' + esc(s) + '</span>' : '';
-  const rows = books.map((b, i) => { const r = rankNo(books, i);
-    return '<tr class="' + (r <= 3 ? 'top' : '') + '"><td class="m">' + medal(r) + '</td><td class="t">' + esc(b.title) + '</td>' +
-      '<td class="s">' + chip(b.shelf) + '<span class="id">' + esc(/^\d+$/.test(b.id) ? b.id : '') + '</span></td><td class="n">' + b.n + '回</td></tr>'; }).join('');
+  const when = posterWhen(d);
+  const chip = b => b.shelf
+    ? '<span class="chip" style="background:' + (SHELF_COLOR[b.shelf] || '#eee') + '">' + esc(b.shelf) + 'の本棚</span>' +
+      (/^\d+$/.test(b.id) ? '<span class="bid">' + esc(b.id) + '</span>' : '')
+    : '';
+  // 長い書名は少し小さくする（文字数でおおまかに）
+  const fit = (t, base) => { const n = t.length; return Math.round(base * (n > 20 ? 0.7 : n > 14 ? 0.8 : n > 10 ? 0.9 : 1)); };
+  const title = (b, base) => {
+    const s = splitTitle(b.title);
+    return '<div class="title" style="font-size:' + fit(s.main, base) + 'px">' + esc(s.main) + '</div>' +
+      (s.sub ? '<div class="subt">' + esc(s.sub) + '</div>' : '');
+  };
+  const card = (b, i, big) => {
+    const r = rankNo(books, i);
+    return '<div class="card r' + Math.min(r, 4) + (big ? ' big' : '') + '">' +
+      '<div class="badge"><b>' + r + '</b><span>位</span></div>' +
+      '<div class="body">' + title(b, (big ? 36 : 25) * (readers.length ? 0.88 : 1)) +
+      (b.author ? '<div class="author">' + esc(b.author) + '</div>' : '') +
+      '<div class="meta">' + chip(b) + '<span class="cnt">' + b.n + '<small>回</small></span></div></div></div>';
+  };
+  const top = books.slice(0, 3), rest = books.slice(3);
+  const row = (b, j) => {
+    const i = j + 3, r = rankNo(books, i), s = splitTitle(b.title);
+    return '<li><span class="no">' + r + '</span>' +
+      '<span class="lt"><b>' + esc(s.main) + '</b>' + (s.sub ? '<small>' + esc(s.sub) + '</small>' : '') +
+      (b.author ? '<em>' + esc(b.author) + '</em>' : '') + '</span>' +
+      '<span class="lm">' + chip(b) + '</span><span class="cnt">' + b.n + '<small>回</small></span></li>';
+  };
   const readers = withReaders ? d.studentRank.slice(0, 5) : [];
-  const rrows = readers.map((s, i) => '<li>' + medal(rankNo(readers, i)) + ' ' + esc(s.name) + ' さん　<b>' + s.n + '冊</b></li>').join('');
-  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>大木文庫 人気ランキング</title><style>' +
-    '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}' +
-    'body{margin:0;font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;color:#2b2a27;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-    '.p{max-width:186mm;margin:0 auto;border:5px solid #c4682b;border-radius:16px;padding:9mm 9mm 7mm}' +
-    'h1{margin:0;text-align:center;font-size:40px;letter-spacing:.08em}h1 small{display:block;font-size:22px;color:#c4682b;letter-spacing:.1em;margin-bottom:4px}' +
-    '.lead{text-align:center;font-size:17px;color:#7a746a;margin:6px 0 14px}' +
-    'table{width:100%;border-collapse:collapse}td{padding:8px 6px;border-bottom:2px dotted #e6dfd0;font-size:20px;vertical-align:middle}' +
-    'tr.top td{font-size:24px;font-weight:700}td.m{width:52px;text-align:center;font-size:30px}tr.top td.m{font-size:40px}' +
-    '.no{display:inline-block;width:34px;height:34px;line-height:34px;border-radius:50%;background:#f3eee2;font-size:18px;font-weight:700}' +
-    'td.s{white-space:nowrap;text-align:right;font-size:16px}td.n{white-space:nowrap;text-align:right;width:70px;color:#c4682b;font-weight:700}' +
-    '.chip{display:inline-block;padding:2px 12px;border-radius:8px;font-weight:700;margin-right:6px}.id{color:#7a746a}' +
-    'h2{font-size:22px;margin:16px 0 6px}ul{list-style:none;padding:0;margin:0;font-size:19px;columns:2}li{margin:4px 0}' +
-    '.foot{margin-top:14px;display:flex;gap:10px}.foot div{flex:1;background:#fff6e0;border-radius:12px;padding:10px 12px;font-size:16px;line-height:1.5}' +
-    '.foot b{font-size:18px}.btn{display:block;margin:10px auto;font-size:18px;padding:10px 24px}@media print{.btn{display:none}}' +
-    '</style></head><body><button class="btn" onclick="print()">🖨 印刷する</button><div class="p">' +
-    '<h1><small>📚 大木文庫</small>' + esc(posterTitleRange(d)) + '人気の本</h1>' +
-    '<p class="lead">この期間に ' + d.nYear + '回 貸し出されました（' + d.nReaders + '人が借りました）</p>' +
-    '<table>' + rows + '</table>' +
-    (rrows ? '<h2>📖 たくさん借りた人</h2><ul>' + rrows + '</ul>' : '') +
-    '<div class="foot"><div><b>色＝本棚の色</b><br>ランキングの本は、その色の本棚にあります。</div>' +
-    '<div><b>🎴 返すときはおみくじ</b><br>期限内に返すと、おみくじが引けます。</div></div>' +
-    '</div></body></html>';
+  const legend = Object.keys(SHELVES).filter(k => k !== '禁')
+    .map(k => '<span class="chip" style="background:' + SHELF_COLOR[k] + '">' + esc(k) + '</span>').join('');
+  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>大木文庫 人気の本ランキング</title>' +
+    '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">' +
+    '<style>' +
+    '@page{size:A4 portrait;margin:0}*{box-sizing:border-box}' +
+    'html,body{margin:0;background:#e9e4da}' +
+    'body{font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;color:#2b2a27;' +
+    '-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    // 日本語は文節の切れ目で改行（対応ブラウザ）。行頭の「、」などは避ける
+    '.title,.subt,.author,.lt b,.lt small,.sub,.foot p{word-break:auto-phrase;line-break:strict;text-wrap:pretty}' +
+    '.page{width:210mm;height:297mm;margin:10px auto;background:#fffaf0;padding:9mm 11mm 8mm;display:flex;flex-direction:column;position:relative;overflow:hidden}' +
+    '.page:before{content:"";position:absolute;inset:0;border:3mm solid #c4682b;pointer-events:none}' +
+    '.hd{text-align:center;margin-bottom:3.5mm}' +
+    '.brand{display:inline-block;background:#c4682b;color:#fff;font-weight:700;font-size:15px;letter-spacing:.2em;padding:3px 16px;border-radius:20px}' +
+    '.h1{margin:2mm 0 .5mm;font-size:42px;font-weight:900;letter-spacing:.06em;line-height:1.15}' +
+    '.h1 .when{color:#c4682b}.h1 .best{display:inline-block;font-size:20px;vertical-align:middle;background:#2b2a27;color:#fffaf0;padding:2px 10px;border-radius:6px;margin-left:8px;letter-spacing:.1em}' +
+    '.sub{font-size:14px;color:#7a746a}' +
+    '.top{display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin-bottom:3.5mm}' +
+    '.card{display:flex;gap:4mm;align-items:flex-start;background:#fff;border-radius:14px;padding:3mm 4.5mm;border:2px solid #eadfca}' +
+    '.card.big{grid-column:1/-1;padding:4mm 6mm;border:3px solid #d4a017;background:linear-gradient(135deg,#fffdf3,#fff6da)}' +
+    '.badge{flex:none;width:17mm;height:17mm;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 -3px 0 rgba(0,0,0,.15)}' +
+    '.badge b{font-size:30px;line-height:1}.badge span{font-size:13px;margin-top:8px}' +
+    '.big .badge{width:21mm;height:21mm}.big .badge b{font-size:44px}.big .badge span{font-size:16px;margin-top:14px}' +
+    '.r1 .badge{background:#d4a017}.r2 .badge{background:#9aa5b1}.r3 .badge{background:#c27c4a}.r4 .badge{background:#7a746a}' +
+    '.body{flex:1;min-width:0}' +
+    '.title{font-weight:900;line-height:1.25}' +
+    '.subt{font-size:15px;font-weight:700;color:#5a554c;margin-top:1mm}' +
+    '.author{font-size:14px;color:#7a746a;margin-top:1.5mm}' +
+    '.meta{display:flex;align-items:center;gap:6px;margin-top:1.8mm;flex-wrap:wrap}' +
+    '.chip{display:inline-block;padding:1px 10px;border-radius:8px;font-weight:700;font-size:13px}' +
+    '.bid{font-size:13px;color:#7a746a}' +
+    '.cnt{margin-left:auto;color:#c4682b;font-weight:900;font-size:22px;white-space:nowrap}.cnt small{font-size:13px;margin-left:1px}' +
+    '.big .cnt{font-size:30px}' +
+    '.rest{flex:1;display:flex;flex-direction:column}' +
+    '.rest h2{font-size:17px;margin:0 0 2mm;color:#5a554c}' +
+    'ol{list-style:none;margin:0;padding:0;background:#fff;border-radius:14px;border:2px solid #eadfca;flex:1;display:flex;flex-direction:column;justify-content:space-around}' +
+    'li{display:flex;align-items:center;gap:4mm;padding:1.6mm 5mm;border-bottom:2px dotted #eadfca}li:last-child{border-bottom:0}' +
+    '.no{flex:none;width:9mm;height:9mm;border-radius:50%;background:#f3eee2;font-weight:900;font-size:18px;display:flex;align-items:center;justify-content:center}' +
+    '.lt{flex:1;min-width:0;line-height:1.25}.lt b{font-size:17px;font-weight:900}.lt small{display:block;font-size:13px;color:#5a554c;font-weight:700}' +
+    '.lt em{display:block;font-style:normal;font-size:12px;color:#7a746a}' +
+    '.lm{flex:none;text-align:right}' +
+    '.readers{margin-top:3mm;background:linear-gradient(135deg,#eef6ff,#e8f5ee);border-radius:14px;border:3px solid #3a5a8c;padding:3mm 5mm 4mm}' +
+    '.readers h2{font-size:22px;font-weight:900;margin:0 0 2.5mm;color:#3a5a8c;text-align:center;letter-spacing:.08em}' +
+    '.rd{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3mm}' +
+    '.rd>div{background:#fff;border-radius:12px;padding:2.5mm 1.5mm;text-align:center;border:2px solid #d6e2f0;min-width:0}' +
+    '.rd .rk{display:inline-block;width:9mm;height:9mm;line-height:9mm;border-radius:50%;color:#fff;font-weight:900;font-size:16px;background:#7a746a}' +
+    '.rd .k1 .rk{background:#d4a017}.rd .k2 .rk{background:#9aa5b1}.rd .k3 .rk{background:#c27c4a}' +
+    '.rd .k1{border-color:#d4a017}' +
+    '.rd .hd2{display:flex;align-items:center;justify-content:space-between}' +
+    '.rd .nm{font-weight:900;margin-top:2mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}.rd .nm small{font-size:11px;font-weight:700;margin-left:1px}' +
+    '.rd .n{font-size:24px;font-weight:900;color:#c4682b;line-height:1}.rd .n small{font-size:13px}' +
+    // 「たくさん借りた人」を載せるときは、ほかを少しつめて A4 に収める
+    '.withr .top{gap:2.5mm;margin-bottom:2.5mm}.withr .card{padding:2.5mm 4mm}.withr .card.big{padding:3mm 5mm}' +
+    '.withr .big .badge{width:18mm;height:18mm}.withr .big .badge b{font-size:38px}.withr .big .badge span{margin-top:12px}' +
+    '.withr .badge{width:15mm;height:15mm}.withr li{padding:1.1mm 5mm}.withr .lt b{font-size:16px}.withr .no{width:8mm;height:8mm;font-size:16px}' +
+    '.withr .h1{font-size:34px}.withr .foot p{font-size:11.5px}.withr .foot div{padding:2mm 3mm}' +
+    '.withr li{padding:.5mm 5mm}.withr .hd{margin-bottom:2.5mm}.withr .meta{margin-top:1.2mm}.withr .rest h2{margin-bottom:1mm;font-size:15px}' +
+    '.withr .readers{padding:2.5mm 4mm 3mm}.withr .readers h2{font-size:20px;margin-bottom:2mm}.withr .foot{margin-top:2.5mm}' +
+    '.foot{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3mm;margin-top:3mm}' +
+    '.foot div{background:#fff3dc;border-radius:12px;padding:2.5mm 3.5mm}' +
+    '.foot h3{margin:0 0 1mm;font-size:15px}.foot p{margin:0;font-size:12.5px;line-height:1.55}' +
+    '.foot .chip{font-size:11px;padding:0 7px;margin:2px 2px 0 0}' +
+    '.bar{text-align:center;padding:10px}.bar button{font:inherit;font-size:18px;padding:10px 26px;border-radius:12px;border:0;background:#c4682b;color:#fff;cursor:pointer}' +
+    '@media print{html,body{background:#fff}.bar{display:none}.page{margin:0}}' +
+    '</style></head><body>' +
+    '<div class="bar"><button onclick="print()">🖨 印刷する</button></div>' +
+    '<div class="page' + (readers.length ? ' withr' : '') + '">' +
+    '<div class="hd"><span class="brand">📚 大木文庫</span>' +
+    '<div class="h1"><span class="when">' + esc(when.head) + '</span>人気の本<span class="best">BEST ' + books.length + '</span></div>' +
+    '<div class="sub">' + esc(when.sub) + '　｜　貸出 ' + d.nYear + '回・' + d.nReaders + '人が借りました</div></div>' +
+    '<div class="top">' + top.map((b, i) => card(b, i, i === 0)).join('') + '</div>' +
+    (rest.length ? '<div class="rest"><h2>4位〜' + books.length + '位</h2><ol>' + rest.map(row).join('') + '</ol></div>' : '<div class="rest"></div>') +
+    (readers.length ? '<div class="readers"><h2>📖 たくさん借りた人</h2><div class="rd">' + readers.map((s, i) => {
+      const r = rankNo(readers, i);
+      const nm = String(s.name).replace(/[ 　]+/g, ' ');
+      const fs = nm.length > 7 ? 12 : nm.length > 5 ? 13 : nm.length > 4 ? 15 : 17;   // 名前が長いときは小さくして1行に収める
+      return '<div class="k' + Math.min(r, 4) + '"><div class="hd2"><span class="rk">' + r + '</span><span class="n">' + s.n + '<small>冊</small></span></div>' +
+        '<div class="nm" style="font-size:' + fs + 'px">' + esc(nm) + '<small>さん</small></div></div>';
+    }).join('') + '</div></div>' : '') +
+    '<div class="foot">' +
+    '<div><h3>🎨 本棚の色</h3><p>' + legend + '<br>ランキングの本は、その色の本棚にあります。</p></div>' +
+    '<div><h3>📗 借りかた</h3><p>iPadで「借りる」→ 会員番号 → 本のQRラベルをカメラにかざすだけ。</p></div>' +
+    '<div><h3>🎴 おみくじ</h3><p>期限内に返すと、返すときにおみくじが引けます。</p></div>' +
+    '</div></div>' +
+    '<script>document.fonts && document.fonts.ready.then(function(){document.body.classList.add("ready")});<\/script>' +
+    '</body></html>';
   const w = window.open('', '_blank');
   if (!w) return alert('ポスターの画面を開けませんでした。ポップアップを許可してください。');
   w.document.open(); w.document.write(html); w.document.close();
