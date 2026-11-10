@@ -140,6 +140,24 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 .kuji-lucky{font-size:17px}
 .kuji-lucky .chip{display:inline-block;padding:1px 12px;border-radius:8px;font-weight:700}
 .kuji-hint{font-size:15px;color:var(--muted);margin-top:8px}
+.inv-modes{display:flex;gap:0;margin:0 0 12px;border:2px solid var(--accent);border-radius:12px;overflow:hidden;max-width:520px}
+.inv-modes button{flex:1;font-size:16px;padding:10px;border:0;background:#fff;color:var(--accent)}
+.inv-modes button.on{background:var(--accent);color:#fff;font-weight:700}
+.inv-shelves{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.inv-shelves button{min-width:76px;padding:8px 12px;border-radius:12px;border:3px solid transparent;font-size:20px;font-weight:700;color:#2b2a27}
+.inv-shelves button small{display:block;font-size:13px;font-weight:400}
+.inv-shelves button.on{border-color:#2b2a27}
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px}
+.inv-grid button{position:relative;min-height:64px;padding:6px 4px;border-radius:12px;border:2px solid var(--line);background:#fff;color:var(--ink);overflow:hidden}
+.inv-grid button b{display:block;font-size:22px;line-height:1.1}
+.inv-grid button span{display:block;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.inv-grid button.long{grid-column:span 2}
+.inv-grid button.long b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-grid button.got{background:var(--borrow);border-color:var(--borrow);color:#fff}
+.inv-grid button.got span{color:#e8f5ee}
+.inv-grid button.got::after{content:'✓';position:absolute;top:2px;right:6px;font-size:14px}
+.inv-grid i{position:absolute;top:2px;left:4px;font-style:normal;font-size:9px;padding:0 4px;border-radius:4px;background:#fff3cd;color:#8a5a00}
+.inv-grid i.lost{background:var(--danger-bg);color:var(--danger)}
 .inv-ok{background:var(--ok-bg);border-radius:12px;padding:10px 14px;font-size:18px}
 .inv-ng{background:var(--danger-bg);border-radius:12px;padding:10px 14px;font-size:18px}
 .bookcard{background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px 18px;max-width:560px}
@@ -345,14 +363,31 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
     </div>
 
     <div class="pane" id="p-inv">
-      <p class="note">本棚の本を はしから順番に読みとっていきます。途中でやめても、この端末に記録が残ります（再開できます）。<br>
-        読みとり終わったら「結果を見る」で、記録と本棚のちがいを確認します。</p>
+      <p class="note">本棚にある本を記録していきます。途中でやめても、この端末に記録が残ります（再開できます）。<br>
+        全部終わったら「結果を見る」で、記録と本棚のちがいを確認します。</p>
+      <div class="inv-modes">
+        <button id="invm-tap" class="on" onclick="invMode('tap')">👆 丸シールの番号をタップ</button>
+        <button id="invm-cam" onclick="invMode('cam')">📷 QRをカメラで読む</button>
+      </div>
+      <div class="inline">
+        <button class="btn primary small" onclick="invResult()">結果を見る</button>
+        <span id="inv-count" style="font-size:18px;font-weight:700"></span>
+        <span style="flex:1"></span>
+        <button class="btn small" onclick="invReset()">最初からやりなおす</button>
+      </div>
+
+      <!-- タップで記録 -->
+      <div id="inv-tap-ui" style="margin-top:12px">
+        <p class="hint" style="text-align:left;margin:0 0 8px">本棚の色をえらび、背表紙の丸シールに書いてある番号を、本棚にある分だけタップします（もう一度タップで取り消し）。</p>
+        <div class="inv-shelves" id="inv-shelves"></div>
+        <div class="inv-grid" id="inv-grid"></div>
+      </div>
+
+      <!-- カメラで記録 -->
+      <div id="inv-cam-ui" style="display:none;margin-top:12px">
       <div class="inline">
         <button class="btn green small" onclick="invStart()">▶ 読みとり開始</button>
         <button class="btn small" onclick="invStop()">一時停止</button>
-        <button class="btn primary small" onclick="invResult()">結果を見る</button>
-        <span style="flex:1"></span>
-        <button class="btn small" onclick="invReset()">最初からやりなおす</button>
       </div>
       <div class="camwrap" id="cw-inv" style="display:none;margin:14px 0 6px">
         <div class="camfail">
@@ -362,10 +397,10 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
         </div>
       </div>
       <div class="inline" style="margin-top:10px">
-        <input id="inv-code" style="width:200px" placeholder="番号を手入力" onkeydown="if(event.key==='Enter'){invScan(this.value);this.value='';}">
-        <span id="inv-count" style="font-size:18px;font-weight:700"></span>
+        <input id="inv-code" style="width:200px" placeholder="管理番号を手入力" onkeydown="if(event.key==='Enter'){invScan(this.value);this.value='';}">
       </div>
       <div id="inv-last" style="margin-top:8px"></div>
+      </div>
       <div id="inv-out" style="margin-top:10px"></div>
     </div>
   </section>
@@ -787,7 +822,7 @@ function setTab(t) {
   if (t === 'dash') loadDash();
   if (t === 'reg') setTimeout(() => $('isbn-scan').focus(), 80);
   if (t === 'book') loadBookList();
-  if (t === 'inv') invShowCount();
+  if (t === 'inv') { invShowCount(); if (invModeNow === 'tap') invRenderTap(); }
 }
 function table(cols, rows, rowClass) {
   if (!rows.length) return '<p class="hint" style="text-align:left">ありません</p>';
@@ -1055,6 +1090,48 @@ function invReset() {
   if (!confirm('棚卸しの読みとり記録を消して、最初からやりなおしますか？')) return;
   inv = { scanned: [], unknown: [], started: '' }; invSave(inv);
   $('inv-last').innerHTML = ''; $('inv-out').innerHTML = ''; invShowCount();
+  if (invModeNow === 'tap') invRenderTap();
+}
+
+// ---- 棚卸し：丸シールの番号をタップ ----
+let invModeNow = 'tap', invShelf = '赤';
+function invMode(m) {
+  invModeNow = m;
+  $('invm-tap').classList.toggle('on', m === 'tap');
+  $('invm-cam').classList.toggle('on', m === 'cam');
+  $('inv-tap-ui').style.display = m === 'tap' ? '' : 'none';
+  $('inv-cam-ui').style.display = m === 'cam' ? '' : 'none';
+  if (m === 'tap') { invStop(); invRenderTap(); }
+}
+const invLabel = b => b.sticker || b.title;
+function invRenderTap() {
+  invEnsureBase().then(base => {
+    const list = base.filter(b => b.status !== '廃棄');
+    const shelves = Object.keys(SHELVES).filter(k => list.some(b => b.shelf === k));
+    if (list.some(b => !b.shelf)) shelves.push('');   // 棚の色がない本（デモなど）
+    if (shelves.indexOf(invShelf) < 0) invShelf = shelves[0] || '';
+    $('inv-shelves').innerHTML = shelves.map(k => {
+      const books = list.filter(b => b.shelf === k);
+      const got = books.filter(b => inv.scanned.indexOf(b.id) >= 0).length;
+      return '<button class="' + (k === invShelf ? 'on' : '') + '" style="background:' + (SHELF_COLOR[k] || '#eee') + '" onclick="invShelf=\'' + k + '\';invRenderTap()">' +
+        esc(k || 'その他') + '<small>' + got + ' / ' + books.length + '</small></button>';
+    }).join('');
+    const books = list.filter(b => b.shelf === invShelf).sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0) || (a.id < b.id ? -1 : 1));
+    $('inv-grid').innerHTML = books.map(b => {
+      const on = inv.scanned.indexOf(b.id) >= 0;
+      const tag = b.loan ? '<i class="ln">貸出中</i>' : b.status === '紛失' ? '<i class="lost">紛失</i>' : '';
+      return '<button class="' + (on ? 'got' : '') + (b.sticker ? '' : ' long') + '" onclick="invTap(\'' + esc(b.id) + '\')" title="' + esc(b.id + ' ' + b.title) + '">' +
+        '<b>' + esc(invLabel(b)) + '</b><span>' + esc(b.sticker ? b.title : b.id) + '</span>' + tag + '</button>';
+    }).join('') || '<p class="hint">この本棚の本はありません</p>';
+    invShowCount();
+  });
+}
+function invTap(id) {
+  if (!inv.started) { const d = new Date(); inv.started = (d.getMonth() + 1) + '/' + d.getDate(); }
+  const i = inv.scanned.indexOf(id);
+  if (i >= 0) inv.scanned.splice(i, 1); else { inv.scanned.push(id); beep(true); }
+  invSave(inv);
+  invRenderTap();
 }
 function invResult() {
   invStop();
@@ -1147,6 +1224,13 @@ const MOCK = (() => {
   const books = ['かいけつゾロリのドラゴンたいじ', 'ハリー・ポッターと賢者の石', 'こまったさんのスパゲティ', 'ルドルフとイッパイアッテナ', '星の王子さま',
     'エルマーのぼうけん', 'モモ', 'はてしない物語', '君たちはどう生きるか', '西の魔女が死んだ']
     .map((t, i) => ({ id: 'DEMO-' + String(i + 1).padStart(2, '0'), title: t, status: '', shelf: ['赤', '黄', '青', '緑', 'Jr'][i % 5] }));
+  // 棚卸しのタップ画面を試すための本（プレビューだけ）
+  ['夏の朝', '駒音高く', '世界地図の下書き', 'クラスメイト（上）', 'クラスメイト（下）', '森に願いを', '数の悪魔', '蜜蜂と遠雷', '陸王', '少年と犬', '星の子', '流星と稲妻']
+    .forEach((t, i) => books.push({ id: String(1001 + i), title: t, status: '', shelf: '赤', sticker: String(i + 1) }));
+  [['A1', '都会のトム＆ソーヤ①'], ['A2', '都会のトム＆ソーヤ②'], ['Z1', '銭天堂１'], ['Z2', '銭天堂２'], ['Z1-1', '銭天堂１'], ['ZK-1', '銭天堂 吉凶通り １']]
+    .forEach(([s, t], i) => books.push({ id: String(2001 + i), title: t, status: s === 'Z2' ? '紛失' : '', shelf: '黄', sticker: s }));
+  ['にほんちずえほん', '猫は生きている', 'わすれられないおくりもの']
+    .forEach((t, i) => books.push({ id: String(5001 + i), title: t, status: '', shelf: 'Jr', sticker: '' }));
   const students = { '87698769': '石川真琴', '11111111': 'テスト 花子', '22222222': 'テスト 太郎' };
   const loans = [
     { id: 'DEMO-03', sno: '11111111', out: now - 20 * day, due: now - 6 * day, ret: null },
@@ -1205,7 +1289,7 @@ const MOCK = (() => {
     setBooksStatus: (p, ids, st) => { pin(p); ids.forEach(id => { const b = books.find(x => x.id === bk(id)); if (!b) return; b.status = st;
       if (st) loans.filter(l => l.id === b.id && !l.ret).forEach(l => { l.ret = now; }); }); return { ok: true, n: ids.length }; },
     getInventoryBase: p => { pin(p); return books.map(b => { const l = loans.find(x => x.id === b.id && !x.ret); const v = l && view(l);
-      return { id: b.id, title: b.title, status: b.status, loan: v ? { sno: v.sno, name: v.name, due: v.due, overdue: v.overdue } : null }; }); },
+      return { id: b.id, title: b.title, status: b.status, shelf: b.shelf || '', sticker: b.sticker || '', loan: v ? { sno: v.sno, name: v.name, due: v.due, overdue: v.overdue } : null }; }); },
     markReturned: (p, ids) => { pin(p); ids.forEach(id => { loans.filter(l => l.id === id && !l.ret).forEach(l => { l.ret = now; });
       const b = books.find(x => x.id === id); if (b && b.status === '紛失') b.status = ''; }); return { ok: true, n: ids.length }; },
   };
