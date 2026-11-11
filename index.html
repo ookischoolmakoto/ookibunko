@@ -37,6 +37,11 @@ button{font-family:inherit;cursor:pointer}
 .keypad button:active{background:#efe8d8}
 .keypad .ok{background:var(--borrow);color:#fff;border-color:var(--borrow);font-weight:700}
 .keypad .del{font-size:22px}
+.steps-sno{display:flex;justify-content:center;gap:10px;margin:14px 0 -6px}
+.steps-sno span{font-size:17px;padding:5px 16px;border-radius:999px;background:#efe8d8;color:var(--muted)}
+.steps-sno span.on{background:var(--borrow);color:#fff;font-weight:700}
+#sno.birth{font-size:clamp(22px,5vw,30px);letter-spacing:.06em;white-space:nowrap;padding-left:6px;padding-right:6px;display:flex;align-items:center;justify-content:center}
+#sno.birth small{font-size:.55em;color:var(--muted);margin:0 .3em}
 .btn{font-size:20px;padding:12px 24px;border-radius:14px;border:2px solid var(--line);background:#fff;color:var(--ink)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.green{background:var(--borrow);border-color:var(--borrow);color:#fff}
@@ -164,6 +169,13 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 .kuji-lucky b{font-size:20px}
 .kuji-lucky .chip{display:inline-block;padding:1px 16px;border-radius:8px;font-weight:700;font-size:20px}
 .kuji-hint{font-size:16px;color:#8a5a00;margin-top:10px}
+.kuji-book{margin:12px auto 0;max-width:420px;background:#fff;border:2px solid #e0c9a0;border-radius:14px;padding:8px 14px 10px}
+.kuji-book small{display:block;font-size:13px;color:var(--muted)}
+.kuji-book .kb-title{font-size:23px;font-weight:700;line-height:1.35;margin-top:2px;word-break:auto-phrase;text-wrap:pretty}
+.kuji-book .kb-author{font-size:15px;color:var(--muted)}
+.kuji-book .kb-where{font-size:17px;margin-top:4px}
+.kuji-book .chip{display:inline-block;padding:0 12px;border-radius:8px;font-weight:700}
+.kuji-book .kb-no{display:inline-block;min-width:44px;padding:0 10px;border-radius:999px;border:2px solid #c9b48f;background:#fffaf0;font-size:22px;font-weight:800}
 /* 紙吹雪 */
 .confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:40}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;animation:fall linear forwards}
@@ -238,8 +250,10 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
   <!-- 生徒番号 -->
   <section id="v-student" class="view">
     <div class="modebar borrow">📗 本を借りる</div>
-    <h2>四谷大塚の会員番号8桁を入力してください</h2>
+    <div class="steps-sno"><span id="st1" class="on">① 会員番号</span><span id="st2">② 生年月日</span></div>
+    <h2 id="sno-h">四谷大塚の会員番号8桁を入力してください</h2>
     <div class="display" id="sno"></div>
+    <p class="hint" id="sno-hint" style="display:none">例：2014年5月3日生まれ → 20140503</p>
     <div class="msg-err" id="sno-err"></div>
     <div class="keypad">
       <button onclick="key('1')">1</button><button onclick="key('2')">2</button><button onclick="key('3')">3</button>
@@ -474,7 +488,7 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state = { sno: '', student: null, pin: null, registered: [], tab: 'dash', shelf: '' };
+const state = { sno: '', birth: '', step: 'sno', student: null, pin: null, registered: [], tab: 'dash', shelf: '' };
 // 棚（色）と番号の千の位。Code.gs の CONFIG.SHELVES と同じにする
 const SHELVES = { '赤': 1, '黄': 2, '青': 3, '緑': 4, 'Jr': 5, '禁': 6 };
 const SHELF_COLOR = { '赤': '#ff9999', '黄': '#ffee58', '青': '#90caf9', '緑': '#a5d6a7', 'Jr': '#e1bee7', '禁': '#cfcfcf' };
@@ -595,7 +609,7 @@ function initMode(m) {
   if (MODE === 'admin') { $('title').textContent = '📚 大木文庫 管理画面'; document.title = '大木文庫 管理画面'; show('v-login'); }
 }
 function home() {
-  state.sno = ''; state.student = null; closeCam();
+  state.sno = ''; state.birth = ''; state.step = 'sno'; state.student = null; closeCam();
   if (MODE === 'admin') show(state.pin ? 'v-admin' : 'v-login');
   else show('v-home');
 }
@@ -615,15 +629,30 @@ function tick() {
 tick(); setInterval(tick, 60000);
 
 // ---- 借りる ----
-function startBorrow() { state.sno = ''; renderSno(); $('sno-err').textContent = ''; show('v-student'); }
+function startBorrow() { state.sno = ''; state.birth = ''; state.step = 'sno'; renderSno(); $('sno-err').textContent = ''; show('v-student'); }
 const MEMBER_DIGITS = 8;   // 会員番号のけた数
+const USE_BIRTH = true;    // 会員番号のあとに生年月日8桁も入れる（Code.gs の USE_BIRTH と合わせる）
 const fmtNo = s => String(s).replace(/^(\d{4})(\d)/, '$1 $2');
-function renderSno() { $('sno').textContent = state.sno ? fmtNo(state.sno) : ' '; }
+// 生年月日は合言葉なので、入れた数字は ● でかくす（年・月・日の区切りだけ見せる）
+const fmtBirth = s => { const d = (s.replace(/./g, '●') + '－－－－－－－－').slice(0, 8); return d.slice(0, 4) + '<small>年</small>' + d.slice(4, 6) + '<small>月</small>' + d.slice(6) + '<small>日</small>'; };
+function renderSno() {
+  const b = state.step === 'birth';
+  $('sno').classList.toggle('birth', b);
+  if (b) $('sno').innerHTML = fmtBirth(state.birth); else $('sno').textContent = state.sno ? fmtNo(state.sno) : ' ';
+  $('sno-h').textContent = b ? '生年月日を8桁で入力してください' : '四谷大塚の会員番号8桁を入力してください';
+  $('sno-hint').style.display = b ? '' : 'none';
+  $('st1').classList.toggle('on', !b); $('st2').classList.toggle('on', b);
+  $('st2').style.display = USE_BIRTH ? '' : 'none';
+}
 function key(k) {
   $('sno-err').textContent = '';
-  if (k === 'del') state.sno = state.sno.slice(0, -1);
+  const f = state.step === 'birth' ? 'birth' : 'sno';
+  if (k === 'del') {
+    if (f === 'birth' && !state.birth) { state.step = 'sno'; }   // 生年月日が空のときに「消す」→ 会員番号にもどる
+    else state[f] = state[f].slice(0, -1);
+  }
   else if (k === 'ok') return submitSno();
-  else if (state.sno.length < MEMBER_DIGITS) state.sno += k;
+  else if (state[f].length < 8) state[f] += k;
   renderSno();
 }
 document.addEventListener('keydown', e => {
@@ -636,8 +665,12 @@ document.addEventListener('keydown', e => {
 function submitSno() {
   if (!state.sno) return;
   if (state.sno.length !== MEMBER_DIGITS) { $('sno-err').textContent = '会員番号は' + MEMBER_DIGITS + '桁です'; return; }
-  api('getStudent', state.sno).then(r => {
-    if (!r.ok) { $('sno-err').textContent = r.msg; state.sno = ''; renderSno(); return; }
+  if (USE_BIRTH && state.step === 'sno') { state.step = 'birth'; state.birth = ''; renderSno(); return; }
+  if (USE_BIRTH && !/^(19|20)\d\d(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(state.birth)) {
+    $('sno-err').textContent = '生年月日は 年4桁・月2桁・日2桁 で入れてください'; state.birth = ''; renderSno(); return;
+  }
+  api('getStudent', state.sno, state.birth).then(r => {
+    if (!r.ok) { $('sno-err').textContent = r.msg; state.sno = ''; state.birth = ''; state.step = 'sno'; renderSno(); return; }
     state.student = r;
     $('cf-name').textContent = r.student.name + ' さん';
     $('cf-no').textContent = '会員番号 ' + fmtNo(r.student.no);
@@ -659,13 +692,13 @@ function renderBorrow() {
   $('borrow-scan').style.display = r.canBorrow ? '' : 'none';
 }
 function doBorrow(code) {
-  api('borrowBook', state.student.student.no, code).then(r => {
+  api('borrowBook', state.student.student.no, code, state.birth).then(r => {
     if (!r.ok) return showResult(false, '借りられませんでした', r.msg, null, false, null, 'borrow');
     showResult(true, '借りました', '『' + r.title + '』', '返却期限は ' + r.due + ' です', r.more);
   });
 }
 function continueBorrow() {
-  api('getStudent', state.student.student.no).then(r => { state.student = r; renderBorrow(); show('v-borrow-book'); });
+  api('getStudent', state.student.student.no, state.birth).then(r => { if (!r.ok) return home(); state.student = r; renderBorrow(); show('v-borrow-book'); });
 }
 
 // ---- 返す ----
@@ -682,7 +715,7 @@ function doReturn(code) {
       : '<div id="kuji"></div>';
     showResult(true, '返却しました', '『' + r.title + '』', null, false,
       r.late ? '返却期限を過ぎていました。次からは期限までに返してください。' : null, 'return', shelf + kuji);
-    if (!r.late) { $('result').classList.add('with-kuji'); setTimeout(drawOmikuji, 500); }
+    if (!r.late) { $('result').classList.add('with-kuji'); setTimeout(() => drawOmikuji(r.lucky), 500); }
   });
 }
 
@@ -701,7 +734,7 @@ const OMIKUJI = [
     '前に途中でやめた本を、もう一度開いてみましょう。今ならおもしろく読めます。', '一日一ページでも大丈夫。続けることが大切です。']],
 ];
 const LUCKY_ITEMS = ['しおり', '鉛筆', '辞書', 'ノート', '水筒', 'ハンカチ', '消しゴム', '付せん'];
-function drawOmikuji() {
+function drawOmikuji(lucky) {
   const box = $('kuji');
   if (!box || box.dataset.done) return;
   box.dataset.done = '1';
@@ -710,13 +743,14 @@ function drawOmikuji() {
   const pick = a => a[Math.floor(Math.random() * a.length)];
   let x = Math.random() * 100, f = OMIKUJI[OMIKUJI.length - 1];
   for (const o of OMIKUJI) { if ((x -= o[1]) < 0) { f = o; break; } }
-  const shelf = pick(Object.keys(SHELVES).filter(k => k !== '禁'));
+  // ラッキー本（いま借りられる本からサーバーがえらぶ）。なければ本棚だけ
+  const shelf = lucky && SHELF_COLOR[lucky.shelf] ? lucky.shelf : pick(Object.keys(SHELVES).filter(k => k !== '禁'));
   // ① おみくじの箱をふる（カラカラ）
   box.innerHTML = '<div class="kuji-stage"><div class="kuji-title">🎉 期限内に返してくれたので、おみくじを引きます！</div>' +
     '<div class="mikuji shake"><div class="stick"></div><div class="tube"><span>おみくじ</span></div></div>' +
     '<div class="kuji-sfx">カラカラ…</div></div>';
   let ticks = 0;
-  const tk = setInterval(() => { tick(); if (++ticks >= 11) clearInterval(tk); }, 130);
+  const tk = setInterval(() => { clack(); if (++ticks >= 11) clearInterval(tk); }, 130);
   // ② 棒が飛び出す
   setTimeout(() => {
     const m = box.querySelector('.mikuji');
@@ -735,7 +769,14 @@ function drawOmikuji() {
       '<div class="kuji-msg">' + esc(pick(f[3])) + '</div>' +
       '<div class="kuji-lucky"><div><small>ラッキー本棚</small><span class="chip" style="background:' + SHELF_COLOR[shelf] + '">' + esc(shelf) + '</span></div>' +
       '<div><small>ラッキーアイテム</small><b>' + esc(pick(LUCKY_ITEMS)) + '</b></div></div>' +
-      '<div class="kuji-hint">次は <b>' + esc(shelf) + '</b> の本棚から1冊借りてみましょう</div></div>';
+      (lucky
+        ? '<div class="kuji-book"><small>📖 今日のラッキー本（いま借りられます）</small>' +
+          '<div class="kb-title">『' + esc(lucky.title) + '』</div>' +
+          (lucky.author ? '<div class="kb-author">' + esc(lucky.author) + '</div>' : '') +
+          '<div class="kb-where"><span class="chip" style="background:' + SHELF_COLOR[shelf] + '">' + esc(shelf) + '</span> の本棚の' +
+          ' <span class="kb-no">' + esc(lucky.sticker) + '</span> 番</div></div>' +
+          '<div class="kuji-hint">次はこの本を借りてみましょう</div></div>'
+        : '<div class="kuji-hint">次は <b>' + esc(shelf) + '</b> の本棚から1冊借りてみましょう</div></div>');
     confetti(big ? 120 : 50, big);
     if (big) fanfare(); else chime(true);
     startResultCountdown(15);   // 読む時間をとって15秒でもどる
@@ -761,7 +802,7 @@ function confetti(n, gold) {
   setTimeout(() => layer.remove(), 4500);
 }
 // カラカラ（短い木の音）とポンッ
-function tick() {
+function clack() {
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
@@ -1507,6 +1548,8 @@ const MOCK = (() => {
   ['にほんちずえほん', '猫は生きている', 'わすれられないおくりもの']
     .forEach((t, i) => books.push({ id: String(5001 + i), title: t, status: '', shelf: 'Jr', sticker: '' }));
   const students = { '87698769': '石川真琴', '11111111': 'テスト 花子', '22222222': 'テスト 太郎' };
+  const births = { '87698769': '20140401', '11111111': '20140505', '22222222': '20150303' };   // Code.gs の DEMO_MEMBERS と同じ
+  const who = (sno, birth) => { sno = String(Number(sno)); return students[sno] && births[sno] === String(birth) ? sno : null; };
   const loans = [
     { id: 'DEMO-03', sno: '11111111', out: now - 20 * day, due: now - 6 * day, ret: null },
     { id: 'DEMO-05', sno: '22222222', out: now - 3 * day, due: now + 11 * day, ret: null },
@@ -1526,9 +1569,10 @@ const MOCK = (() => {
   };
   const pin = p => { if (p !== '0000') throw new Error('PINがちがいます'); };
   return {
-    getStudent: sno => { sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その会員番号は見つかりません。番号を確認してください。' };
+    getStudent: (sno, birth) => { sno = who(sno, birth); if (!sno) return { ok: false, msg: '会員番号か生年月日がちがいます。もう一度入れてください。' };
       return Object.assign({ ok: true, student: { no: sno, name: students[sno] }, max: 1 }, status(sno)); },
-    borrowBook: (sno, code, force) => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
+    borrowBook: (sno, code, birth) => who(sno, birth) ? MOCK.borrowCore(String(Number(sno)), code, false) : { ok: false, msg: '会員番号か生年月日がちがいます。もう一度入れてください。' },
+    borrowCore: (sno, code, force) => { const b = books.find(x => x.id === bk(code)); if (!b) return { ok: false, msg: 'この本は登録されていません。先生に知らせてください。' };
       if (b.status) return { ok: false, msg: '『' + b.title + '』は現在貸し出しできません（' + b.status + '）。先生に知らせてください。' };
       if (loans.some(l => l.id === b.id && !l.ret)) return { ok: false, msg: '『' + b.title + '』は貸出中のままになっています。先に「返す」で返却してから借りてください。' };
       const s = status(sno); if (!s.canBorrow && !force) return { ok: false, msg: s.reason, canForce: true };
@@ -1538,7 +1582,12 @@ const MOCK = (() => {
       const found = b.status === '紛失'; if (found) b.status = '';
       const l = loans.find(x => x.id === b.id && !x.ret);
       if (!l) return found ? { ok: true, title: b.title, name: '', late: false, shelf: b.shelf } : { ok: false, msg: '『' + b.title + '』は貸出中ではありません（すでに返却済みです）。' };
-      l.ret = now; return { ok: true, title: b.title, name: students[l.sno], late: k(l.due) < today, shelf: b.shelf }; },
+      l.ret = now; const late = k(l.due) < today;
+      const can = books.filter(x => x.id !== b.id && !x.status && x.shelf !== '禁' && x.sticker && !loans.some(m => m.id === x.id && !m.ret));
+      const red = can.filter(x => x.shelf === '赤'), pool = red.length && Math.random() < 0.7 ? red : can;
+      const c = pool[Math.floor(Math.random() * pool.length)];
+      const lucky = late || !c ? null : { id: c.id, title: c.title, author: c.author || '', shelf: c.shelf, sticker: c.sticker || '' };
+      return { ok: true, title: b.title, name: students[l.sno], late: late, shelf: b.shelf, lucky: lucky }; },
     adminLogin: p => p === '0000' ? { ok: true } : { ok: false, msg: 'PINがちがいます（デモは 0000）' },
     getDashboard: (p, from, to) => { pin(p); const act = loans.filter(l => !l.ret).map(view); const sc = {}, bc = {};
       from = from || '2026-04-01'; to = to || today;
@@ -1555,7 +1604,7 @@ const MOCK = (() => {
       const list = Object.keys(students).filter(no => (!g || g === 'テスト') && (!q || students[no].indexOf(q) >= 0 || no.indexOf(q) >= 0))
         .map(no => ({ no: no, name: students[no], grade: 'テスト', cls: '', loans: loans.filter(l => l.sno === no && !l.ret).length }));
       return { ok: true, grades: grades, list: list, total: list.length }; },
-    adminBorrow: (p, sno, code, force) => { pin(p); return MOCK.borrowBook(sno, code, force); },
+    adminBorrow: (p, sno, code, force) => { pin(p); return MOCK.borrowCore(sno, code, force); },
     adminReturn: (p, code) => { pin(p); return MOCK.returnBook(code); },
     lookupIsbn: (p, isbn) => { pin(p); isbn = String(isbn).replace(/-/g, ''); if (!/^97[89]\d{10}$/.test(isbn)) return { ok: false, msg: 'ISBN（978 か 979 ではじまる13けた）のバーコードを読みとってください。' };
       return { ok: true, isbn: isbn, title: 'デモの本（' + isbn.slice(-4) + '）', author: 'デモ 著者', found: true, dup: [] }; },
