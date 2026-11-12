@@ -1210,7 +1210,7 @@ function searchSt(first) {
     if (r.list.length === 1) { $('hist-list').innerHTML = ''; return loadHist(r.list[0].no); }
     $('hist-list').innerHTML = '<p class="hint" style="text-align:left;margin:4px 0">' + r.total + '人' + (r.total > r.list.length ? '（はじめの' + r.list.length + '人を表示）' : '') + '：名前を押すと記録が出ます</p>' +
       '<div class="st-list">' + r.list.map(s =>
-        '<button' + (s.ban ? ' class="banned"' : '') + ' onclick="loadHist(\'' + esc(s.no) + '\')"><b>' + esc(s.name) + (s.ban ? '<i class="ban">貸出禁止</i>' : '') + '</b><span>' + esc(s.no) + '　' + esc(s.grade) + (s.cls ? ' ' + esc(s.cls) : '') + '</span>' +
+        '<button' + (s.ban ? ' class="banned"' : '') + ' onclick="loadHist(\'' + esc(s.no) + '\')"><b>' + esc(s.name) + (s.ban ? '<i class="ban">貸出禁止</i>' : '') + '</b><span>' + esc(s.no) + '　' + esc(s.grade) + '</span>' +
         (s.loans ? '<i>貸出中 ' + s.loans + '冊</i>' : '') + '</button>').join('') + '</div>';
     $('hist-out').innerHTML = '';
   });
@@ -1223,7 +1223,7 @@ function loadHist(sno, msg) {
     const act = r.list.filter(l => !l.ret), past = r.list.filter(l => l.ret);
     $('hist-out').innerHTML = (msg || '') +
       '<div class="bookcard" style="max-width:none"><div class="ttl">' + esc(r.student.name) + ' さん</div>' +
-      '<div class="hint" style="text-align:left;margin:0">会員番号 ' + esc(r.student.no) + '　' + esc(r.student.grade) + (r.student.cls ? ' ' + esc(r.student.cls) : '') +
+      '<div class="hint" style="text-align:left;margin:0">会員番号 ' + esc(r.student.no) + '　' + esc(r.student.grade) +
       '　これまで ' + r.list.length + '冊</div>' +
       (r.ban
         ? '<div class="banbox"><b>🚫 ' + esc(r.ban) + '</b><span style="font-size:13px">（iPadでは借りられません。返却はできます）</span>' +
@@ -1622,7 +1622,7 @@ const MOCK = (() => {
         nYear: inRange.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
     getStudentHistory: (p, sno) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その生徒番号は見つかりません。' };
       const s = status(sno);
-      return { ok: true, student: { no: sno, name: students[sno], grade: 'テスト', cls: '' }, list: loans.filter(l => l.sno === sno).map(view).reverse(), canBorrow: s.canBorrow, reason: s.reason, max: 1, ban: bans[sno] || '' }; },
+      return { ok: true, student: { no: sno, name: students[sno], grade: 'テスト' }, list: loans.filter(l => l.sno === sno).map(view).reverse(), canBorrow: s.canBorrow, reason: s.reason, max: 1, ban: bans[sno] || '' }; },
     setStudentBan: (p, sno, on, memo) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その会員番号は見つかりません。' };
       const d = new Date(now), ymd = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
       memo = String(memo || '').trim();
@@ -1631,7 +1631,7 @@ const MOCK = (() => {
     searchStudents: (p, q, g) => { pin(p); q = String(q || ''); const grades = ['テスト'];
       if (!q && !g) return { ok: true, grades: grades, list: [], total: 0 };
       const list = Object.keys(students).filter(no => (!g || g === 'テスト') && (!q || students[no].indexOf(q) >= 0 || no.indexOf(q) >= 0))
-        .map(no => ({ no: no, name: students[no], grade: 'テスト', cls: '', loans: loans.filter(l => l.sno === no && !l.ret).length, ban: !!bans[no] }));
+        .map(no => ({ no: no, name: students[no], grade: 'テスト', loans: loans.filter(l => l.sno === no && !l.ret).length, ban: !!bans[no] }));
       return { ok: true, grades: grades, list: list, total: list.length }; },
     adminBorrow: (p, sno, code, force) => { pin(p); return MOCK.borrowCore(sno, code, force); },
     adminReturn: (p, code) => { pin(p); return MOCK.returnBook(code); },
