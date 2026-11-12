@@ -196,6 +196,11 @@ details.manual summary{color:var(--accent);font-size:17px;cursor:pointer;padding
 .st-list button b{display:block;font-size:17px}
 .st-list button span{font-size:12px;color:var(--muted)}
 .st-list button i{position:absolute;top:4px;right:6px;font-style:normal;font-size:10px;background:#fff3cd;color:#8a5a00;border-radius:4px;padding:0 4px}
+.st-list button.banned{border-color:#e3a49b;background:#fdf1ef}
+.st-list button i.ban{position:static;display:inline-block;margin-left:6px;background:#c0392b;color:#fff;vertical-align:2px}
+.banbox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 4px;padding:8px 12px;border-radius:12px;background:#fdf1ef;border:2px solid #e3a49b;color:#9a2a1c}
+.banbox b{font-size:16px}
+.banbtn{margin-top:8px;border-color:#c0392b !important;color:#c0392b !important}
 .inv-modes{display:flex;gap:0;margin:0 0 12px;border:2px solid var(--accent);border-radius:12px;overflow:hidden;max-width:520px}
 .inv-modes button{flex:1;font-size:16px;padding:10px;border:0;background:#fff;color:var(--accent)}
 .inv-modes button.on{background:var(--accent);color:#fff;font-weight:700}
@@ -1205,7 +1210,7 @@ function searchSt(first) {
     if (r.list.length === 1) { $('hist-list').innerHTML = ''; return loadHist(r.list[0].no); }
     $('hist-list').innerHTML = '<p class="hint" style="text-align:left;margin:4px 0">' + r.total + '人' + (r.total > r.list.length ? '（はじめの' + r.list.length + '人を表示）' : '') + '：名前を押すと記録が出ます</p>' +
       '<div class="st-list">' + r.list.map(s =>
-        '<button onclick="loadHist(\'' + esc(s.no) + '\')"><b>' + esc(s.name) + '</b><span>' + esc(s.no) + '　' + esc(s.grade) + (s.cls ? ' ' + esc(s.cls) : '') + '</span>' +
+        '<button' + (s.ban ? ' class="banned"' : '') + ' onclick="loadHist(\'' + esc(s.no) + '\')"><b>' + esc(s.name) + (s.ban ? '<i class="ban">貸出禁止</i>' : '') + '</b><span>' + esc(s.no) + '　' + esc(s.grade) + (s.cls ? ' ' + esc(s.cls) : '') + '</span>' +
         (s.loans ? '<i>貸出中 ' + s.loans + '冊</i>' : '') + '</button>').join('') + '</div>';
     $('hist-out').innerHTML = '';
   });
@@ -1220,6 +1225,10 @@ function loadHist(sno, msg) {
       '<div class="bookcard" style="max-width:none"><div class="ttl">' + esc(r.student.name) + ' さん</div>' +
       '<div class="hint" style="text-align:left;margin:0">会員番号 ' + esc(r.student.no) + '　' + esc(r.student.grade) + (r.student.cls ? ' ' + esc(r.student.cls) : '') +
       '　これまで ' + r.list.length + '冊</div>' +
+      (r.ban
+        ? '<div class="banbox"><b>🚫 ' + esc(r.ban) + '</b><span style="font-size:13px">（iPadでは借りられません。返却はできます）</span>' +
+          '<button class="btn small" onclick="setBan(false)">貸出禁止をやめる</button></div>'
+        : '<button class="btn small banbtn" onclick="setBan(true)">🚫 この生徒を貸出禁止にする</button>') +
       '<h3>いま借りている本（' + act.length + '冊）</h3>' +
       (act.length ? '<div class="tw"><table><tr><th>管理番号</th><th>本</th><th>貸出日</th><th>期限</th><th></th></tr>' + act.map(l =>
         '<tr class="' + (l.overdue ? 'late' : '') + '"><td>' + esc(l.bookId) + '</td><td class="wrap">' + esc(l.title) + '</td><td>' + esc(l.out) + '</td>' +
@@ -1227,13 +1236,26 @@ function loadHist(sno, msg) {
         '<td><button class="btn small" style="border-color:var(--return);color:var(--return)" onclick="adminRet(\'' + esc(l.bookId) + '\')">返却する</button></td></tr>').join('') +
         '</table></div>' : '<p class="hint" style="text-align:left">ありません</p>') +
       '<h3>本を貸し出す</h3>' +
-      (r.canBorrow ? '' : '<p class="note">' + esc(r.reason) + '（先生の判断で貸し出すこともできます）</p>') +
+      (r.canBorrow ? '' : '<p class="note">' + (r.ban ? '貸出禁止にしています' : esc(r.reason)) + '（先生の判断で貸し出すこともできます）</p>') +
       '<div class="inline"><input id="hist-book" placeholder="管理番号（1012 など）" style="width:200px" onkeydown="if(event.key===\'Enter\')adminLend()">' +
       '<button class="btn small" onclick="openCam(t => { $(\'hist-book\').value = t; adminLend(); })">📷 読む</button>' +
       '<button class="btn green small" onclick="adminLend()">貸し出す</button></div>' +
       '<h3>これまでに借りた本</h3>' +
       table([['管理番号', l => l.bookId], ['本', l => l.title, 1], ['貸出日', l => l.out], ['期限', l => l.due], ['返却日', l => l.ret]], past) +
       '</div>';
+  });
+}
+// 生徒を貸出禁止にする／やめる（理由のメモは生徒シートに残り、生徒の画面には出ない）
+function setBan(on) {
+  const name = ($('hist-out').querySelector('.ttl') || {}).textContent || '';
+  let memo = '';
+  if (on) {
+    memo = prompt(name + ' を貸出禁止にします。\n理由のメモ（空欄でも可）を入れてください。\n※ 生徒の画面には「先生に知らせてください」とだけ出ます。', '');
+    if (memo === null) return;
+  } else if (!confirm(name + ' の貸出禁止をやめて、また借りられるようにしますか？')) return;
+  api('setStudentBan', state.pin, state.histNo, on, memo).then(r => {
+    if (!r.ok) return alert(r.msg);
+    loadHist(state.histNo, '<p class="note ok">' + (on ? '貸出禁止にしました。' : '貸出禁止をやめました。また借りられます。') + '</p>');
   });
 }
 function adminLend(force) {
@@ -1549,6 +1571,7 @@ const MOCK = (() => {
     .forEach((t, i) => books.push({ id: String(5001 + i), title: t, status: '', shelf: 'Jr', sticker: '' }));
   const students = { '87698769': '石川真琴', '11111111': 'テスト 花子', '22222222': 'テスト 太郎' };
   const births = { '87698769': '20140401', '11111111': '20140505', '22222222': '20150303' };   // Code.gs の DEMO_MEMBERS と同じ
+  const bans = {};   // 貸出禁止にした生徒（会員番号 → メモ）
   const who = (sno, birth) => { sno = String(Number(sno)); return students[sno] && births[sno] === String(birth) ? sno : null; };
   const loans = [
     { id: 'DEMO-03', sno: '11111111', out: now - 20 * day, due: now - 6 * day, ret: null },
@@ -1563,6 +1586,7 @@ const MOCK = (() => {
     dueKey: k(l.due), ret: l.ret ? f(l.ret) : '', overdue: !l.ret && k(l.due) < today, late: l.ret ? 0 : Math.max(0, Math.round((now - l.due) / day)) });
   const status = sno => {
     const mine = loans.filter(l => l.sno === sno && !l.ret).map(view);
+    if (bans[sno]) return { loans: mine, canBorrow: false, reason: 'いまは本を借りられません。先生に知らせてください。' };
     if (mine.some(l => l.overdue)) return { loans: mine, canBorrow: false, reason: '返却期限を過ぎている本があります。先に返却してから借りてください。' };
     if (mine.length >= 1) return { loans: mine, canBorrow: false, reason: '現在 1冊借りています。同時に借りられるのは1冊までなので、返却してから借りてください。' };
     return { loans: mine, canBorrow: true, reason: '' };
@@ -1598,11 +1622,16 @@ const MOCK = (() => {
         nYear: inRange.length, nReaders: Object.keys(sc).length, overdue: act.filter(l => l.overdue), active: act, studentRank: top(sc), bookRank: top(bc) }; },
     getStudentHistory: (p, sno) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その生徒番号は見つかりません。' };
       const s = status(sno);
-      return { ok: true, student: { no: sno, name: students[sno], grade: 'テスト', cls: '' }, list: loans.filter(l => l.sno === sno).map(view).reverse(), canBorrow: s.canBorrow, reason: s.reason, max: 1 }; },
+      return { ok: true, student: { no: sno, name: students[sno], grade: 'テスト', cls: '' }, list: loans.filter(l => l.sno === sno).map(view).reverse(), canBorrow: s.canBorrow, reason: s.reason, max: 1, ban: bans[sno] || '' }; },
+    setStudentBan: (p, sno, on, memo) => { pin(p); sno = String(Number(sno)); if (!students[sno]) return { ok: false, msg: 'その会員番号は見つかりません。' };
+      const d = new Date(now), ymd = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+      memo = String(memo || '').trim();
+      if (on) bans[sno] = (memo ? '貸出禁止：' + memo : '貸出禁止') + '（' + ymd + '）'; else delete bans[sno];
+      return { ok: true, ban: bans[sno] || '' }; },
     searchStudents: (p, q, g) => { pin(p); q = String(q || ''); const grades = ['テスト'];
       if (!q && !g) return { ok: true, grades: grades, list: [], total: 0 };
       const list = Object.keys(students).filter(no => (!g || g === 'テスト') && (!q || students[no].indexOf(q) >= 0 || no.indexOf(q) >= 0))
-        .map(no => ({ no: no, name: students[no], grade: 'テスト', cls: '', loans: loans.filter(l => l.sno === no && !l.ret).length }));
+        .map(no => ({ no: no, name: students[no], grade: 'テスト', cls: '', loans: loans.filter(l => l.sno === no && !l.ret).length, ban: !!bans[no] }));
       return { ok: true, grades: grades, list: list, total: list.length }; },
     adminBorrow: (p, sno, code, force) => { pin(p); return MOCK.borrowCore(sno, code, force); },
     adminReturn: (p, code) => { pin(p); return MOCK.returnBook(code); },
